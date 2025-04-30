@@ -1,0 +1,60 @@
+<!-- File: apps/erpnext_enhancements/erpnext_enhancements/templates/includes/po_review_modal_template.html -->
+<div class="po-review">
+    <h3>Purchase Order Review Summary</h3>
+
+    <h4>Purchase Order Details</h4>
+    <table class="table table-bordered">
+        <tr><th>PO ID</th><td>{{ header.po_id }}</td></tr>
+        <tr><th>Date</th><td>{{ header.date }}</td></tr>
+        <tr><th>Vendor</th><td>{{ header.vendor }}</td></tr>
+        <tr><th>Warehouse</th><td>{{ header.warehouse }}</td></tr>
+    </table>
+
+    <h4>Purchase Items</h4>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Item Name</th><th>SKU</th><th>Qty</th><th>UOM</th>
+                <th>Price (Excl. Tax)</th><th>Price (Incl. Tax)</th><th>Warehouse</th>
+                <th>Stock</th><th>Discount %</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in purchase_items %}
+            <tr>
+                <td>{{ item.item_name }}</td><td>{{ item.sku_code }}</td><td>{{ item.qty }}</td><td>{{ item.unit }}</td>
+                <td>{{ item.purchase_price_excl_tax }}</td><td>{{ item.purchase_price_incl_tax }}</td>
+                <td>{{ item.warehouse }}</td><td>{{ item.physical_stock }}</td><td>{{ item.discount or 0 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h4>Sales Order Details</h4>
+    <table class="table table-hover">
+        <thead>
+            <tr>
+                <th>Order ID</th><th>Customer</th><th>Salesperson</th><th>Influencer</th>
+                <th>Commission</th><th>Advance Paid</th><th>Credit Limit</th>
+                <th>Delivery Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in sales_details %}
+            <tr>
+                <td>{{ s.order_id }}</td><td>{{ s.customer }}</td><td>{{ s.salesman or '-' }}</td><td>{{ s.influencer or '-' }}</td>
+                <td>{{ s.commission_value or 0 }}</td><td>{{ s.advance_amount or 0 }}</td><td>{{ s.credit_limit or 0 }}</td>
+                <td>{{ s.delivery_date or '-' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <br/>
+    <h4>Summary:</h4>
+    <table class="table table-sm">
+        <tr><th>Total Discount from Purchase Order</th><td>{{ purchase_total_discount }}</td></tr>
+        <tr><th>Total Discount from Sales Orders</th><td>{{ sales_total_discount }}</td></tr>
+        <tr><th>Total Discount:</th><td>{{ total_discount }}</td></tr>
+    </table>
+</div>
