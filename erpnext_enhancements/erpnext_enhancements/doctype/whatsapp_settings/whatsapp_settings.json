@@ -1,0 +1,62 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-05-12 01:27:06.870207",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "sender_id",
+  "auth_token",
+  "whatsapp_doctypes"
+ ],
+ "fields": [
+  {
+   "default": "0",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "sender_id",
+   "fieldtype": "Data",
+   "label": "Sender Number"
+  },
+  {
+   "fieldname": "auth_token",
+   "fieldtype": "Data",
+   "label": "Token Id"
+  },
+  {
+   "fieldname": "whatsapp_doctypes",
+   "fieldtype": "Table",
+   "label": "WhatsApp Doctypes",
+   "options": "WhatsApp Doctypes"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2025-05-14 08:48:10.332945",
+ "modified_by": "Administrator",
+ "module": "erpnext_enhancements",
+ "name": "WhatsApp Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -87,7 +87,8 @@ def render_po_review_template(purchase_order):
 
 
         sales_total_discount += so.discount_amount or 0
-        total_discount=sales_total_discount + purchase_total_discount
+    
+    total_discount=sales_total_discount + purchase_total_discount
 
     html = frappe.render_template("erpnext_enhancements/templates/includes/po_review_modal_template.html", {
         "header": header_info,
