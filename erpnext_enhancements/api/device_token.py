@@ -32,3 +32,20 @@ def save_device_token(device_token, device_type="web", device_name=None):
     doc.insert(ignore_permissions=True)
 
     return {"message": "Device token saved successfully."}
+
+
+# fetch('/api/method/erpnext_enhancements.api.device_token.save_device_token', {
+#   method: 'POST',
+#   headers: {
+#     'Content-Type': 'application/json',
+#     'X-Frappe-CSRF-Token': frappe.csrf_token // Required for POST in Frappe
+#   },
+#   body: JSON.stringify({
+#     device_token: 'test-token-abc-123',
+#     device_type: 'web',
+#     device_name: 'Chrome Local Test'
+#   })
+# })
+# .then(res => res.json())
+# .then(console.log)
+# .catch(console.error);
