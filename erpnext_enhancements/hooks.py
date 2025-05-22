@@ -17,20 +17,6 @@ jenv = {
     "jinja": ["erpnext_enhancements.templates.includes.po_review_modal_template"]
 }
 
-web_include_js = [
-    "https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js",
-    "https://www.gstatic.com/firebasejs/8.10.0/firebase-messaging.js",
-    "/assets/erpnext_enhancements/js/fcm-init.js"
-]
-
-# Include JS in desk pages (for admin notifications)
-app_include_js = [
-    "https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js",
-    "https://www.gstatic.com/firebasejs/8.10.0/firebase-messaging.js",
-    "/assets/erpnext_enhancements/js/fcm-init.js"
-]
-
-
 # Document Events
 # ---------------
 # Hook on document methods and events
