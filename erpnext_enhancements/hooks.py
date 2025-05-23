@@ -17,17 +17,6 @@ jenv = {
     "jinja": ["erpnext_enhancements.templates.includes.po_review_modal_template"]
 }
 
-# Document Events
-# ---------------
-# Hook on document methods and events
-doc_events = {
-    "Purchase Order": {
-        "on_update": "erpnext_enhancements.notifications.handle_status_change"
-    }
-    # Replace "Your DocType" with the actual DocType name you want to monitor
-    # For example: "Task", "Issue", etc.
-}
-
 
 # Each item in the list will be shown as an app in the apps page
 # add_to_apps_screen = [
