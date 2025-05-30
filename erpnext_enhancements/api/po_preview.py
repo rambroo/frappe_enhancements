@@ -49,7 +49,6 @@ def render_po_review_template(purchase_order):
 
     for so_name, so in sales_order_map.items():
         salesperson = so.sales_team[0].sales_person if so.sales_team else None
-        commission_rate = so.sales_team[0].commission_rate if so.sales_team else None
 
         advance_payment = frappe.db.sql("""
             SELECT SUM(per.allocated_amount) AS paid_amount
@@ -78,7 +77,7 @@ def render_po_review_template(purchase_order):
             "customer": so.customer,
             "salesman": salesperson,
             "influencer": so.sales_partner,
-            "commission_value": commission_rate,
+            "commission_value": so.commission_rate,
             "advance_amount": advance_payment.paid_amount or 0,
             "credit_limit": credit_limit,
             "overall_discount": order_discount,
