@@ -16,12 +16,6 @@ doctype_js = {
 jenv = {
     "jinja": ["erpnext_enhancements.templates.includes.po_review_modal_template"]
 }
-
-<<<<<<< HEAD
-=======
-
->>>>>>> 8ee3b35 (Fix: Use direct commission_rate from Sales Order in PO Review)
-
 # Each item in the list will be shown as an app in the apps page
 # add_to_apps_screen = [
 # 	{
