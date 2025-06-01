@@ -18,7 +18,7 @@ jenv = {
 doc_events = {
     "*": {
         "on_submit": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification",
-        "before_save": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification"
+        "before_save": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_save"
     }
 }
 

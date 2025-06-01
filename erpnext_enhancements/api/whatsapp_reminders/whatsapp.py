@@ -592,6 +592,60 @@ def handle_whatsapp_notification(doc, method):
         frappe.log_error(f"WhatsApp notification failed: {str(e)}", 
                         f"DocType: {doc.doctype}, Name: {doc.name}")
 
+def handle_whatsapp_notification_save(doc, method):
+    """Handle WhatsApp notification for submitted documents and non-submittable documents on save"""
+    try:
+        # Skip cancelled documents
+        if hasattr(doc, 'docstatus') and doc.docstatus == 2:
+            return
+            
+        settings = frappe.get_single("WhatsApp Settings")
+        if not settings.enabled:
+            return
+
+        # Find matching DocType configuration
+        doctype_setting = next(
+            (d for d in settings.whatsapp_doctypes 
+             if d.enable_whatsapp and d.table_doctype.strip() == doc.doctype), 
+            None
+        )
+        
+        if not doctype_setting or not doctype_setting.phone_field:
+            return
+        
+        # Check if document is submittable
+        meta = frappe.get_meta(doc.doctype)
+        is_submittable = meta.is_submittable
+        
+        # For submittable documents, only proceed if document is submitted (docstatus = 1)
+        # For non-submittable documents, proceed on save (docstatus = 0 or no docstatus)
+        if is_submittable:
+            # Only send notification for submitted documents
+            if not (hasattr(doc, 'docstatus') and doc.docstatus == 1):
+                return
+        else:
+            # For non-submittable documents, send notification on save
+            # These documents can only be saved (docstatus = 0 or no docstatus field)
+            pass
+        
+        phone = get_phone_number(doc, doctype_setting.phone_field)
+        if not phone:
+            frappe.log_error("No mobile number found", 
+                           f"{doc.doctype} - {doc.name}")
+            return
+
+        # Build message and send
+        whatsapp_handler = WhatsAppHandler()
+        message = MessageTemplateHandler.build_message(doc, doctype_setting)
+        
+        # Generate PDF and send
+        pdf_content = PDFGenerator.generate_pdf(doc.doctype, doc.name)
+        whatsapp_handler.send_message(phone, message, doc.doctype, doc.name, 
+                                    pdf_content, fallback_to_text=True)
+
+    except Exception as e:
+        frappe.log_error(f"WhatsApp notification failed: {str(e)}", 
+                        f"DocType: {doc.doctype}, Name: {doc.name}")
 
 # Utility functions
 def test_whatsapp_connection():
