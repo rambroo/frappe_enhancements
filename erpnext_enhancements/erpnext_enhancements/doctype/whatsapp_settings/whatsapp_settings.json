@@ -5,19 +5,40 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "section_break_bvvb"
+  "enabled",
+  "sender_id",
+  "auth_token",
+  "whatsapp_doctypes"
  ],
  "fields": [
   {
-   "fieldname": "section_break_bvvb",
-   "fieldtype": "Section Break"
+   "default": "0",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "sender_id",
+   "fieldtype": "Data",
+   "label": "Sender Number"
+  },
+  {
+   "fieldname": "auth_token",
+   "fieldtype": "Data",
+   "label": "Token Id"
+  },
+  {
+   "fieldname": "whatsapp_doctypes",
+   "fieldtype": "Table",
+   "label": "WhatsApp Doctypes",
+   "options": "WhatsApp Doctypes"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-05-20 22:00:57.254386",
+ "modified": "2025-05-14 08:48:10.332945",
  "modified_by": "Administrator",
  "module": "erpnext_enhancements",
  "name": "WhatsApp Settings",

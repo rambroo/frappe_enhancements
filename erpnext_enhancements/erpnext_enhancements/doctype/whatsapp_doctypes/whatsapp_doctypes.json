@@ -7,7 +7,13 @@
  "engine": "InnoDB",
  "field_order": [
   "table_doctype",
-  "enable_whatsapp"
+  "enable_whatsapp",
+  "phone_field",
+  "date_field",
+  "days_before",
+  "reminder_message",
+  "schedule_enabled",
+  "custom_template"
  ],
  "fields": [
   {
@@ -23,17 +29,44 @@
    "options": "DocType"
   },
   {
-    "fieldname": "phone_field",
-    "fieldtype": "Select",
-    "label": "Phone Field",
-    "description": "Select which phone field to use for sending WhatsApp messages"
-   }
+   "description": "Select which phone field to use for sending WhatsApp messages",
+   "fieldname": "phone_field",
+   "fieldtype": "Data",
+   "label": "Phone Field"
+  },
+  {
+   "fieldname": "date_field",
+   "fieldtype": "Data",
+   "label": "Date Field"
+  },
+  {
+   "fieldname": "days_before",
+   "fieldtype": "Int",
+   "label": "Days Before Date"
+  },
+  {
+   "fieldname": "reminder_message",
+   "fieldtype": "Small Text",
+   "label": "Reminder Message"
+  },
+  {
+   "default": "0",
+   "fieldname": "schedule_enabled",
+   "fieldtype": "Check",
+   "label": "Schedule Enable"
+  },
+  {
+   "fieldname": "custom_template",
+   "fieldtype": "Link",
+   "label": "Custom Template",
+   "options": "WhatsApp Message Template"
+  }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2025-05-14 08:02:03.546776",
+ "modified": "2025-05-30 09:14:31.768152",
  "modified_by": "Administrator",
  "module": "erpnext_enhancements",
  "name": "WhatsApp Doctypes",

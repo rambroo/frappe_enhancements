@@ -1,406 +1,638 @@
 import requests
 import frappe
 import os
-from frappe.utils import get_site_path
+import tempfile
+import re
+import subprocess
+from frappe.utils import get_site_path, add_days, nowdate, date_diff, formatdate
+from frappe.utils.pdf import get_pdf
 
-def handle_whatsapp_notification(doc, method):
-    """Handle WhatsApp notification for submitted documents"""
-    frappe.log_error("Entered handle_whatsapp_notification", f"DocType: {doc.doctype}, Name: {doc.name}")
 
-    settings = frappe.get_single("WhatsApp Settings")
-    if not settings.enabled:
-        frappe.log_error("WhatsApp Disabled", "Settings.disabled = True")
-        return
-
-    # Find matching DocType configuration
-    doctype_setting = next(
-        (d for d in settings.whatsapp_doctypes 
-         if d.enable_whatsapp and d.table_doctype.strip() == doc.doctype), 
-        None
-    )
+class WhatsAppHandler:
+    """Centralized WhatsApp message handler"""
     
-    if not doctype_setting:
-        frappe.log_error("DocType not enabled for WhatsApp", doc.doctype)
-        return
+    def __init__(self):
+        self.settings = frappe.get_single("WhatsApp Settings")
+        self.api_url = "https://api.botmastersender.com/api/v2/?action=send"
     
-    # Get phone number
-    if not doctype_setting.phone_field:
-        frappe.log_error("No phone field configured", f"{doc.doctype} - {doc.name}")
-        return
+    def is_enabled(self):
+        """Check if WhatsApp is enabled and configured"""
+        return (self.settings.enabled and 
+                self.settings.sender_id and 
+                self.settings.auth_token)
+    
+    def send_message(self, receiver_id, message, doctype=None, docname=None, 
+                    pdf_content=None, fallback_to_text=True):
+        """
+        Unified method to send WhatsApp messages with or without PDF
+        """
+        if not self.is_enabled():
+            frappe.log_error("WhatsApp not configured", "WhatsApp Settings")
+            return False
         
-    receiver_id = get_phone_number(doc, doctype_setting.phone_field)
-    if not receiver_id:
-        frappe.log_error("No mobile number found", f"{doc.doctype} - {doc.name}, Field: {doctype_setting.phone_field}")
-        return
-
-    # Build message
-    message = f"{doc.doctype} *{doc.name}* has been submitted."
-    
-    # Add amount if available
-    amount = getattr(doc, "grand_total", None) or getattr(doc, "total", None)
-    if amount:
-        message += f"\nTotal Amount: ₹{amount}"
-
-    message += "\n\nPlease see attached document."
-
-    frappe.log_error("Sending WhatsApp", {
-        "receiver": receiver_id,
-        "message": message,
-        "doctype": doc.doctype,
-        "docname": doc.name
-    })
-
-    send_whatsapp_message_with_attachment(receiver_id, message, doc.doctype, doc.name)
-
-def get_phone_number(doc, phone_field):
-    """
-    Get phone number from document based on field path.
-    Supports direct fields or dot notation for linked documents.
-    """
-    if not phone_field:
-        return None
+        clean_receiver = self._clean_phone_number(receiver_id)
+        if not clean_receiver:
+            frappe.log_error(f"Invalid phone number: {receiver_id}", 
+                           f"WhatsApp - {doctype} {docname}")
+            return False
         
-    parts = phone_field.strip().split('.')
-    
-    # Direct field on the document
-    if len(parts) == 1:
-        return getattr(doc, parts[0], None)
-    
-    # Handle linked document (e.g., supplier.mobile_no)
-    if len(parts) != 2:
-        frappe.log_error(f"Invalid phone field path: {phone_field}", f"DocType: {doc.doctype}, Name: {doc.name}")
-        return None
+        # Try sending with PDF first if available
+        if pdf_content:
+            success = self._send_with_pdf(clean_receiver, message, docname, 
+                                        pdf_content, doctype)
+            if success:
+                return True
         
-    try:
-        link_fieldname, target_fieldname = parts
+        # Fallback to text-only if PDF fails or not available
+        if fallback_to_text:
+            return self._send_text_only(clean_receiver, message, doctype, docname)
         
-        # Check if link field exists and has value
-        link_docname = getattr(doc, link_fieldname, None)
-        if not link_docname:
-            return None
-            
-        # Get linked document type and fetch phone number
-        link_field = doc.meta.get_field(link_fieldname)
-        if not link_field or not link_field.options:
-            return None
-            
-        linked_doc = frappe.get_doc(link_field.options, link_docname)
-        return getattr(linked_doc, target_fieldname, None)
-        
-    except Exception as e:
-        frappe.log_error(f"Error getting phone number: {str(e)}", 
-                        f"Path: {phone_field}, DocType: {doc.doctype}, Name: {doc.name}")
-        return None
-
-def send_whatsapp_message_with_attachment(receiver_id, message, doctype, docname, print_format="Standard"):
-    """Send a WhatsApp message with a document PDF attachment"""
-    settings = frappe.get_single("WhatsApp Settings")
-
-    # Generate and save PDF
-    try:
-        pdf_content = frappe.get_print(doctype, docname, print_format=print_format, as_pdf=True)
-        filename = f"{docname}.pdf"
-        file_path = os.path.join(get_site_path('public', 'files'), filename)
-
-        with open(file_path, "wb") as f:
-            f.write(pdf_content)
-
-        frappe.log_error("PDF created successfully", {"file_path": file_path})
-
-    except Exception as e:
-        frappe.log_error("PDF generation failed", str(e))
-        frappe.throw("Failed to generate PDF for WhatsApp message")
-
-    # Send via BotMasterSender API
-    url = "https://api.botmastersender.com/api/v2/?action=send"
+        return False
     
-    try:
-        with open(file_path, 'rb') as pdf_file:
-            files = {'uploadFile': pdf_file}
+    def _send_with_pdf(self, receiver_id, message, filename, pdf_content, doctype):
+        """Send message with PDF attachment"""
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
+            temp_file.write(pdf_content)
+            temp_file_path = temp_file.name
+        
+        try:
+            with open(temp_file_path, 'rb') as pdf_file:
+                files = {'uploadFile': (f"{filename}.pdf", pdf_file, 'application/pdf')}
+                data = {
+                    'senderId': self.settings.sender_id,
+                    'authToken': self.settings.auth_token,
+                    'messageText': message,
+                    'receiverId': f"91{receiver_id}"
+                }
+                
+                response = requests.post(self.api_url, data=data, files=files, timeout=30)
+                return self._handle_response(response, receiver_id, doctype, "PDF")
+                
+        except Exception as e:
+            frappe.log_error(f"PDF sending failed: {str(e)}", 
+                           f"WhatsApp Error - {doctype}")
+            return False
+        finally:
+            try:
+                os.unlink(temp_file_path)
+            except:
+                pass
+    
+    def _send_text_only(self, receiver_id, message, doctype, docname):
+        """Send text-only message"""
+        # Clean message for text-only sending
+        clean_message = message.replace("Please see attached document.", 
+                                      "Document details shared separately.")
+        
+        try:
             data = {
-                'senderId': settings.sender_id,
-                'authToken': settings.auth_token,
-                'messageText': message,
+                'senderId': self.settings.sender_id,
+                'authToken': self.settings.auth_token,
+                'messageText': clean_message,
                 'receiverId': f"91{receiver_id}"
             }
             
-            response = requests.post(url, data=data, files=files)
-
-        if response.status_code == 200:
-            frappe.msgprint("WhatsApp message with PDF sent!")
-        else:
-            frappe.throw(f"Failed to send message. Status: {response.status_code}, Response: {response.text}")
+            response = requests.post(self.api_url, data=data, timeout=30)
+            return self._handle_response(response, receiver_id, doctype, "Text")
             
-    except Exception as e:
-        frappe.log_error(f"WhatsApp sending failed: {str(e)}", f"DocType: {doctype}, Name: {docname}")
-        frappe.throw("Failed to send WhatsApp message")
+        except Exception as e:
+            frappe.log_error(f"Text sending failed: {str(e)}", 
+                           f"WhatsApp Text Error - {doctype} {docname}")
+            return False
+    
+    def _handle_response(self, response, receiver_id, doctype, msg_type):
+        """Unified response handler for API calls"""
+        if response.status_code != 200:
+            frappe.log_error(f"API failed with status {response.status_code}: {response.text}", 
+                           f"WhatsApp {msg_type} HTTP Error - {doctype}")
+            return False
+        
+        try:
+            response_data = response.json()
+            if isinstance(response_data, list) and len(response_data) > 0:
+                response_data = response_data[0]
+            
+            success_indicators = [
+                response_data.get('status') == 'success' if isinstance(response_data, dict) else False,
+                'success' in response.text.lower(),
+                'sent' in response.text.lower(),
+                response_data.get('result') == 'success' if isinstance(response_data, dict) else False
+            ]
+            
+            if any(success_indicators):
+                frappe.log_error(f"WhatsApp {msg_type} sent successfully to {receiver_id}", 
+                               f"WhatsApp Success - {doctype}")
+                return True
+            else:
+                frappe.log_error(f"API returned error: {response.text}", 
+                               f"WhatsApp {msg_type} API Error - {doctype}")
+                return False
+                
+        except ValueError:
+            # Non-JSON response
+            if 'success' in response.text.lower() or 'sent' in response.text.lower():
+                frappe.log_error(f"WhatsApp {msg_type} sent successfully to {receiver_id}", 
+                               f"WhatsApp Success - {doctype}")
+                return True
+            else:
+                frappe.log_error(f"API returned non-JSON response: {response.text}", 
+                               f"WhatsApp {msg_type} API Error - {doctype}")
+                return False
+    
+    def _clean_phone_number(self, phone):
+        """Clean and validate phone number"""
+        if not phone:
+            return None
+        
+        # Remove formatting
+        phone = str(phone).strip()
+        phone = re.sub(r'[^\d]', '', phone)  # Keep only digits
+        
+        # Remove country code
+        if phone.startswith("91") and len(phone) == 12:
+            phone = phone[2:]
+        
+        # Validate Indian mobile number
+        if len(phone) == 10 and phone.isdigit() and phone[0] in ['6', '7', '8', '9']:
+            return phone
+        
+        return None
 
-def send_po_notification(doc, method):
-    """Send notification when a Purchase Order is submitted"""
+
+class MessageTemplateHandler:
+    """Handles message template processing and placeholder replacement"""
+    
+    @staticmethod
+    def clean_html(text):
+        """Remove HTML tags and entities from text"""
+        if not text:
+            return text
+        
+        try:
+            # Remove HTML tags
+            text = re.sub(r'<[^>]+>', '', text)
+            
+            # Replace common HTML entities
+            html_entities = {
+                '&nbsp;': ' ',
+                '&amp;': '&',
+                '&lt;': '<',
+                '&gt;': '>',
+                '&quot;': '"',
+                '&#39;': "'"
+            }
+            
+            for entity, replacement in html_entities.items():
+                text = text.replace(entity, replacement)
+            
+            # Clean up whitespace
+            text = re.sub(r'\s+', ' ', text).strip()
+            return text
+            
+        except Exception as e:
+            frappe.log_error(f"Error cleaning HTML: {str(e)}", "WhatsApp HTML Cleanup")
+            return text
+    
+    @staticmethod
+    def build_message(doc, doctype_setting, is_reminder=False, target_date=None):
+        """Build WhatsApp message using template or default format"""
+        try:
+            # Try custom template first
+            if doctype_setting.custom_template:
+                template_doc = frappe.get_doc("WhatsApp Message Template", 
+                                            doctype_setting.custom_template)
+                
+                if template_doc and template_doc.is_active and template_doc.template_text:
+                    return MessageTemplateHandler._process_template(
+                        template_doc.template_text, doc, target_date
+                    )
+            
+            # Try reminder message field for reminders
+            if is_reminder and doctype_setting.reminder_message:
+                return MessageTemplateHandler._process_template(
+                    doctype_setting.reminder_message, doc, target_date
+                )
+            
+            # Default message
+            return MessageTemplateHandler._build_default_message(doc, is_reminder, target_date)
+            
+        except Exception as e:
+            frappe.log_error(f"Error building message: {str(e)}", 
+                           f"WhatsApp Template Error - {doc.doctype}")
+            return MessageTemplateHandler._build_fallback_message(doc, is_reminder, target_date)
+    
+    @staticmethod
+    def _process_template(template_text, doc, target_date=None):
+        """Process template with placeholder replacement"""
+        template_text = MessageTemplateHandler.clean_html(template_text)
+        
+        # Build placeholders dictionary
+        placeholders = MessageTemplateHandler._build_placeholders(doc, target_date)
+        
+        # Replace placeholders
+        message = template_text
+        for placeholder, value in placeholders.items():
+            message = message.replace(placeholder, str(value))
+        
+        # Handle dynamic field placeholders
+        remaining_patterns = re.findall(r'\{([^}]+)\}', message)
+        for pattern in remaining_patterns:
+            if hasattr(doc, pattern):
+                value = getattr(doc, pattern)
+                if value:
+                    # Format dates
+                    if hasattr(value, 'strftime'):
+                        try:
+                            value = formatdate(value)
+                        except:
+                            value = str(value)
+                    message = message.replace(f'{{{pattern}}}', str(value))
+                else:
+                    message = message.replace(f'{{{pattern}}}', "")
+        
+        return message
+    
+    @staticmethod
+    def _build_placeholders(doc, target_date=None):
+        """Build common placeholders dictionary"""
+        placeholders = {
+            '{doctype}': doc.doctype,
+            '{name}': doc.name,
+            '{doc_name}': doc.name,
+            '{document_name}': doc.name,
+        }
+        
+        # Amount placeholders
+        amount = getattr(doc, "grand_total", None) or getattr(doc, "total", None)
+        amount_str = f"₹{amount}" if amount else ""
+        placeholders.update({
+            '{amount}': amount_str,
+            '{total}': amount_str,
+            '{grand_total}': amount_str
+        })
+        
+        # Date placeholders
+        if target_date:
+            placeholders.update({
+                '{due_date}': str(target_date),
+                '{target_date}': str(target_date),
+                '{reminder_date}': str(target_date),
+                '{formatted_date}': formatdate(target_date) if target_date else "",
+                '{formatted_due_date}': formatdate(target_date) if target_date else ""
+            })
+            
+            # Days calculation for reminders
+            try:
+                days_diff = date_diff(target_date, nowdate())
+                placeholders.update({
+                    '{days_remaining}': str(max(0, days_diff)),
+                    '{days_left}': str(max(0, days_diff)),
+                    '{day_text}': "day" if days_diff == 1 else "days" if days_diff > 1 else "today"
+                })
+            except:
+                placeholders.update({
+                    '{days_remaining}': "",
+                    '{days_left}': "",
+                    '{day_text}': ""
+                })
+        
+        # Common document fields
+        common_fields = ['customer', 'supplier', 'posting_date', 'due_date', 
+                        'status', 'delivery_date', 'transaction_date']
+        for field in common_fields:
+            if hasattr(doc, field):
+                value = getattr(doc, field)
+                if value and hasattr(value, 'strftime'):
+                    try:
+                        placeholders[f'{{{field}}}'] = formatdate(value)
+                    except:
+                        placeholders[f'{{{field}}}'] = str(value)
+                else:
+                    placeholders[f'{{{field}}}'] = str(value) if value else ""
+        
+        return placeholders
+    
+    @staticmethod
+    def _build_default_message(doc, is_reminder=False, target_date=None):
+        """Build default message format"""
+        if is_reminder:
+            return f"Reminder: Your document {doc.name} is due on {target_date}."
+        
+        message = f"{doc.doctype} *{doc.name}* has been submitted."
+        
+        amount = getattr(doc, "grand_total", None) or getattr(doc, "total", None)
+        if amount:
+            message += f"\nTotal Amount: ₹{amount}"
+        
+        message += "\n\nPlease see attached document."
+        return message
+    
+    @staticmethod
+    def _build_fallback_message(doc, is_reminder=False, target_date=None):
+        """Build basic fallback message"""
+        if is_reminder:
+            return f"Reminder: Document {doc.name} due on {target_date}."
+        return f"{doc.doctype} {doc.name} has been submitted."
+
+
+class PDFGenerator:
+    """Handles PDF generation with multiple fallback methods"""
+    
+    @staticmethod
+    def generate_pdf(doctype, docname, print_format="Standard"):
+        """Generate PDF with fallback methods"""
+        # Check if document is cancelled
+        try:
+            doc = frappe.get_doc(doctype, docname)
+            if hasattr(doc, 'docstatus') and doc.docstatus == 2:
+                frappe.log_error(f"Cannot generate PDF for cancelled document {docname}", 
+                               f"PDF Generation - {doctype}")
+                return None
+        except Exception as e:
+            frappe.log_error(f"Error checking document status: {str(e)}", 
+                           f"PDF Generation - {doctype}")
+            return None
+        
+        # Try different PDF generation methods
+        methods = [
+            PDFGenerator._try_weasyprint,
+            PDFGenerator._try_wkhtmltopdf_minimal,
+            PDFGenerator._try_frappe_default
+        ]
+        
+        for method in methods:
+            try:
+                pdf_content = method(doctype, docname, print_format)
+                if pdf_content:
+                    return pdf_content
+            except Exception as e:
+                frappe.log_error(f"PDF method failed: {str(e)}", 
+                               f"PDF Generation - {doctype}")
+                continue
+        
+        frappe.log_error("All PDF generation methods failed", 
+                        f"PDF Generation Failed - {doctype}")
+        return None
+    
+    @staticmethod
+    def _try_weasyprint(doctype, docname, print_format):
+        """Try WeasyPrint method"""
+        default_format = PDFGenerator._get_default_print_format(doctype)
+        html_content = frappe.get_print(doctype, docname, print_format=default_format)
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', 
+                                       delete=False, encoding='utf-8') as html_file:
+            html_file.write(html_content)
+            html_file_path = html_file.name
+        
+        pdf_file_path = html_file_path.replace('.html', '.pdf')
+        
+        try:
+            subprocess.run(['weasyprint', html_file_path, pdf_file_path], 
+                         check=True, capture_output=True, text=True)
+            
+            with open(pdf_file_path, 'rb') as pdf_file:
+                pdf_content = pdf_file.read()
+            
+            frappe.log_error("PDF generated using WeasyPrint", 
+                           f"PDF Success - {doctype}")
+            return pdf_content
+            
+        finally:
+            try:
+                os.unlink(html_file_path)
+                if os.path.exists(pdf_file_path):
+                    os.unlink(pdf_file_path)
+            except:
+                pass
+    
+    @staticmethod
+    def _try_wkhtmltopdf_minimal(doctype, docname, print_format):
+        """Try wkhtmltopdf with minimal options"""
+        html_content = frappe.get_print(doctype, docname, print_format=print_format)
+        pdf_content = get_pdf(html_content, {
+            'page-size': 'A4',
+            'encoding': "UTF-8",
+            'quiet': None
+        })
+        frappe.log_error("PDF generated using wkhtmltopdf", f"PDF Success - {doctype}")
+        return pdf_content
+    
+    @staticmethod
+    def _try_frappe_default(doctype, docname, print_format):
+        """Try Frappe's default PDF generation"""
+        pdf_content = frappe.get_print(doctype, docname, print_format="Standard", as_pdf=True)
+        frappe.log_error("PDF generated using Frappe default", f"PDF Success - {doctype}")
+        return pdf_content
+    
+    @staticmethod
+    def _get_default_print_format(doctype):
+        """Get default print format for doctype"""
+        default_format = frappe.db.get_value("Property Setter", {
+            "doctype_or_field": "DocType",
+            "doc_type": doctype,
+            "property": "default_print_format"
+        }, "value")
+        return default_format or "Standard"
+
+
+def get_phone_number(doc, phone_field):
+    """Get phone number from document with support for linked fields"""
+    if not phone_field:
+        return None
+    
+    parts = phone_field.strip().split('.')
+    
+    # Direct field
+    if len(parts) == 1:
+        phone = getattr(doc, parts[0], None)
+        return WhatsAppHandler()._clean_phone_number(phone)
+    
+    # Linked field (e.g., supplier.mobile_no)
+    if len(parts) == 2:
+        try:
+            link_fieldname, target_fieldname = parts
+            link_docname = getattr(doc, link_fieldname, None)
+            
+            if not link_docname:
+                return None
+            
+            link_field = doc.meta.get_field(link_fieldname)
+            if not link_field or not link_field.options:
+                return None
+            
+            linked_doc = frappe.get_doc(link_field.options, link_docname)
+            phone = getattr(linked_doc, target_fieldname, None)
+            return WhatsAppHandler()._clean_phone_number(phone)
+            
+        except Exception as e:
+            frappe.log_error(f"Error getting phone number: {str(e)}", 
+                           f"Phone Field Error - {doc.doctype}")
+            return None
+    
+    return None
+
+
+# Main entry points
+def send_scheduled_whatsapp_reminders():
+    """Main function to send scheduled WhatsApp reminders"""
+    settings = frappe.get_single("WhatsApp Settings")
+    if not settings.enabled:
+        frappe.log_error("WhatsApp reminders skipped", "WhatsApp Settings disabled")
+        return
+
+    for doctype_config in settings.whatsapp_doctypes:
+        if not doctype_config.schedule_enabled or not doctype_config.date_field:
+            continue
+
+        try:
+            process_scheduled_whatsapp_reminder(doctype_config)
+        except Exception as e:
+            error_msg = f"Scheduler failed for {doctype_config.table_doctype}: {str(e)}"
+            frappe.log_error(error_msg, f"WhatsApp Scheduler Error")
+            continue
+
+
+def process_scheduled_whatsapp_reminder(config):
+    """Process scheduled reminders for a specific doctype configuration"""
+    date_field = config.date_field
+    target_date = add_days(nowdate(), config.days_before or 0)
+    
+    filters = {f"{date_field}": target_date}
+    
+    # Exclude cancelled documents
+    if config.table_doctype in ["Purchase Order", "Sales Order", 
+                               "Purchase Invoice", "Sales Invoice"]:
+        filters["docstatus"] = ["!=", 2]
+    
+    docs = frappe.get_all(config.table_doctype, filters=filters, 
+                         fields=["name", "docstatus"])
+
+    whatsapp_handler = WhatsAppHandler()
+    success_count = error_count = 0
+
+    for d in docs:
+        try:
+            # Skip cancelled documents
+            if hasattr(d, 'docstatus') and d.docstatus == 2:
+                continue
+                
+            doc = frappe.get_doc(config.table_doctype, d.name)
+            
+            if hasattr(doc, 'docstatus') and doc.docstatus == 2:
+                continue
+            
+            phone = get_phone_number(doc, config.phone_field)
+            if not phone:
+                error_count += 1
+                continue
+
+            # Build message and send
+            message = MessageTemplateHandler.build_message(doc, config, 
+                                                         is_reminder=True, 
+                                                         target_date=target_date)
+            
+            # Try with PDF attachment
+            pdf_content = PDFGenerator.generate_pdf(doc.doctype, doc.name)
+            
+            if whatsapp_handler.send_message(phone, message, doc.doctype, doc.name, 
+                                           pdf_content, fallback_to_text=True):
+                success_count += 1
+            else:
+                error_count += 1
+                
+        except Exception as e:
+            frappe.log_error(f"Failed to process reminder for {d.name}: {str(e)}", 
+                           f"WhatsApp Reminder Error")
+            error_count += 1
+
+    # Log summary
+    if success_count > 0 or error_count > 0:
+        frappe.log_error(f"Reminders processed - Success: {success_count}, Errors: {error_count}", 
+                        f"WhatsApp Reminder Summary - {config.table_doctype}")
+
+
+def handle_whatsapp_notification(doc, method):
+    """Handle WhatsApp notification for submitted documents"""
     try:
-        supplier = frappe.get_doc("Supplier", doc.supplier)
-        receiver_id = supplier.get("mobile_no")
-
-        if not receiver_id:
-            frappe.log_error(f"No WhatsApp number set for Supplier {doc.supplier}", "PO Notification Failed")
+        # Skip cancelled documents
+        if hasattr(doc, 'docstatus') and doc.docstatus == 2:
+            return
+            
+        settings = frappe.get_single("WhatsApp Settings")
+        if not settings.enabled:
             return
 
-        # Build payment schedule details
-        payment_details = ""
-        if hasattr(doc, 'payment_schedule') and doc.payment_schedule:
-            payment_details = "\n\nPayment Schedule:"
-            for idx, installment in enumerate(doc.payment_schedule, 1):
-                payment_details += f"\n{idx}. ₹{installment.payment_amount} due on {installment.due_date}"
-
-        message = (f"Dear {doc.supplier_name},\n\n"
-                  f"Purchase Order {doc.name} has been submitted.\n"
-                  f"Total Amount: ₹{doc.grand_total}{payment_details}\n\n"
-                  f"Please see attached document for details.")
-                  
-        send_whatsapp_message_with_attachment(receiver_id, message, "Purchase Order", doc.name)
+        # Find matching DocType configuration
+        doctype_setting = next(
+            (d for d in settings.whatsapp_doctypes 
+             if d.enable_whatsapp and d.table_doctype.strip() == doc.doctype), 
+            None
+        )
         
+        if not doctype_setting or not doctype_setting.phone_field:
+            return
+        
+        phone = get_phone_number(doc, doctype_setting.phone_field)
+        if not phone:
+            frappe.log_error("No mobile number found", 
+                           f"{doc.doctype} - {doc.name}")
+            return
+
+        # Build message and send
+        whatsapp_handler = WhatsAppHandler()
+        message = MessageTemplateHandler.build_message(doc, doctype_setting)
+        
+        # Generate PDF and send
+        pdf_content = PDFGenerator.generate_pdf(doc.doctype, doc.name)
+        whatsapp_handler.send_message(phone, message, doc.doctype, doc.name, 
+                                    pdf_content, fallback_to_text=True)
+
     except Exception as e:
-        frappe.log_error(f"PO notification failed: {str(e)}", f"PO: {doc.name}")
+        frappe.log_error(f"WhatsApp notification failed: {str(e)}", 
+                        f"DocType: {doc.doctype}, Name: {doc.name}")
 
 
-        
-# import requests
-# import frappe
-# import os
-# from frappe.utils import get_site_path, today, getdate, add_days, nowdate
-
-# def handle_whatsapp_notification(doc, method):
-#     frappe.log_error("Entered handle_whatsapp_notification", f"DocType: {doc.doctype}, Name: {doc.name}")
-
-#     settings = frappe.get_single("WhatsApp Settings")
-#     if not settings.enabled:
-#         frappe.log_error("WhatsApp Disabled", "Settings.disabled = True")
-#         return
-
-#     # Find matching DocType configuration
-#     matching_doctypes = [d for d in settings.whatsapp_doctypes 
-#                          if d.enable_whatsapp and d.table_doctype.strip() == doc.doctype]
+# Utility functions
+def test_whatsapp_connection():
+    """Test WhatsApp API connection"""
+    whatsapp_handler = WhatsAppHandler()
     
-#     if not matching_doctypes:
-#         frappe.log_error("DocType not enabled for WhatsApp", doc.doctype)
-#         return
+    if not whatsapp_handler.is_enabled():
+        return {"status": "error", "message": "WhatsApp settings not configured"}
     
-#     doctype_setting = matching_doctypes[0]
+    test_message = "Test message from Frappe system."
+    test_number = "1234567890"  # Replace with actual test number
     
-#     # Get phone number based on the selected phone_field
-#     if not doctype_setting.phone_field:
-#         frappe.log_error("No phone field configured", f"{doc.doctype} - {doc.name}")
-#         return
-        
-#     receiver_id = get_phone_number(doc, doctype_setting.phone_field)
+    result = whatsapp_handler.send_message(test_number, test_message, 
+                                         "Test", "Test", fallback_to_text=True)
     
-#     if not receiver_id:
-#         frappe.log_error("No mobile number found", f"{doc.doctype} - {doc.name}, Field: {doctype_setting.phone_field}")
-#         return
+    return {
+        "status": "success" if result else "error",
+        "message": "Test message sent" if result else "Test message failed"
+    }
 
-#     message = f"{doc.doctype} *{doc.name}* has been submitted."
-#     if hasattr(doc, "grand_total"):
-#         message += f"\nTotal Amount: ₹{doc.grand_total}"
-#     elif hasattr(doc, "total"):
-#         message += f"\nTotal Amount: ₹{doc.total}"
 
-#     message += "\n\nPlease see attached document."
-
-#     frappe.log_error("Sending WhatsApp", {
-#         "receiver": receiver_id,
-#         "message": message,
-#         "doctype": doc.doctype,
-#         "docname": doc.name
-#     })
-
-#     send_whatsapp_message_with_attachment(receiver_id, message, doc.doctype, doc.name)
-
-# # Helper function to get phone number from a document based on selected field
-# def get_phone_number(doc, phone_field):
-#     """
-#     Get phone number from document based on field path.
-#     Supports direct fields or dot notation for linked documents.
+def send_whatsapp_without_pdf(receiver_id, message, doctype, docname):
+    """Emergency fallback - send without PDF"""
+    whatsapp_handler = WhatsAppHandler()
     
-#     Example:
-#     - "contact_mobile" - direct field
-#     - "supplier.mobile_no" - field from linked document
-#     """
-#     if not phone_field:
-#         return None
-        
-#     parts = phone_field.strip().split('.')
+    if not whatsapp_handler.is_enabled():
+        return False
     
-#     # Direct field on the document
-#     if len(parts) == 1:
-#         return getattr(doc, parts[0], None)
+    # Clean message and add document reference
+    text_message = message.replace("Please see attached document.", "")
+    text_message += f"\n\nDocument: {docname}"
     
-#     # Handle linked document (e.g., supplier.mobile_no)
-#     try:
-#         # Get the linked document (e.g., "supplier")
-#         link_fieldname = parts[0]
-#         target_fieldname = parts[1]
-        
-#         if not hasattr(doc, link_fieldname) or not getattr(doc, link_fieldname):
-#             return None
-            
-#         link_doctype = doc.meta.get_field(link_fieldname).options
-#         link_docname = getattr(doc, link_fieldname)
-        
-#         linked_doc = frappe.get_doc(link_doctype, link_docname)
-#         return getattr(linked_doc, target_fieldname, None)
-        
-#     except Exception as e:
-#         frappe.log_error(f"Error getting phone number: {str(e)}", 
-#                         f"Path: {phone_field}, DocType: {doc.doctype}, Name: {doc.name}")
-#         return None
-
-# def send_whatsapp_message_with_attachment(receiver_id, message, doctype, docname, print_format="Standard"):
-#     """
-#     Send a WhatsApp message with a document PDF attachment
-#     """
-#     settings = frappe.get_single("WhatsApp Settings")
-
-#     # Step 1: Generate PDF
-#     try:
-#         pdf_content = frappe.get_print(doctype, docname, print_format=print_format, as_pdf=True)
-#         filename = f"{docname}.pdf"
-#         file_path = os.path.join(get_site_path('public', 'files'), filename)
-
-#         with open(file_path, "wb") as f:
-#             f.write(pdf_content)
-
-#         frappe.log_error("PDF created successfully", {"file_path": file_path})
-
-#     except Exception as e:
-#         frappe.log_error("PDF generation failed", str(e))
-#         frappe.throw("Failed to generate PDF for WhatsApp message")
-
-#     # Step 2: Send PDF as attachment to WhatsApp via BotMasterSender
-#     url = "https://api.botmastersender.com/api/v2/?action=send"
-#     files = {
-#         'uploadFile': open(file_path, 'rb')
-#     }
-#     data = {
-#         'senderId': settings.sender_id,
-#         'authToken': settings.auth_token,
-#         'messageText': message,
-#         'receiverId': "91" + receiver_id
-#     }
-
-#     response = requests.post(url, data=data, files=files)
-
-#     if response.status_code == 200:
-#         frappe.msgprint("WhatsApp message with PDF sent!")
-#     else:
-#         frappe.throw(f"Failed to send message. Status: {response.status_code}, Response: {response.text}")
-
-# def send_po_notification(doc, method):
-#     """
-#     Send notification when a Purchase Order is submitted
-#     """
-#     supplier = frappe.get_doc("Supplier", doc.supplier)
-#     receiver_id = supplier.get("mobile_no")
-
-#     if not receiver_id:
-#         frappe.log_error(f"No WhatsApp number set for Supplier {doc.supplier}", "PO Notification Failed")
-#         return
-
-#     # Check if the PO has payment schedule
-#     payment_details = ""
-#     if hasattr(doc, 'payment_schedule') and doc.payment_schedule:
-#         payment_details = "\n\nPayment Schedule:"
-#         for idx, installment in enumerate(doc.payment_schedule, 1):
-#             payment_details += f"\n{idx}. ₹{installment.payment_amount} due on {installment.due_date}"
-
-#     message = (f"Dear {doc.supplier_name},\n\n"
-#               f"Purchase Order {doc.name} has been submitted.\n"
-#               f"Total Amount: ₹{doc.grand_total}{payment_details}\n\n"
-#               f"Please see attached document for details.")
-              
-#     send_whatsapp_message_with_attachment(receiver_id, message, "Purchase Order", doc.name)
+    return whatsapp_handler.send_message(receiver_id, text_message, doctype, 
+                                       docname, pdf_content=None, fallback_to_text=True)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    # def send_po_due_reminders():
-    # """
-    # Scheduled function to check and send reminders for upcoming and due PO payments
-    # """
-    # # Find Purchase Orders with payment schedules having due dates coming up or already due
-    # today_date = getdate(today())
-    # upcoming_threshold = add_days(today_date, 5)  # Send reminders 5 days before due date as well
-    
-    # # Get all POs with payment schedules
-    # pos = frappe.get_all("Purchase Order", 
-    #                    filters={"docstatus": 1, "status": ["not in", ["Cancelled", "Closed"]]},
-    #                    fields=["name", "supplier", "supplier_name", "grand_total"])
-    
-    # for po in pos:
-    #     po_doc = frappe.get_doc("Purchase Order", po.name)
-        
-    #     # Check if payment schedule exists (payment terms have been applied)
-    #     if not hasattr(po_doc, 'payment_schedule') or not po_doc.payment_schedule:
-    #         continue
-            
-    #     for installment in po_doc.payment_schedule:
-    #         due_date = getdate(installment.due_date)
-            
-    #         # Check if this installment is due today, overdue, or coming up within threshold
-    #         if (due_date <= today_date) or (due_date <= upcoming_threshold):
-    #             # Get supplier contact details
-    #             supplier = frappe.get_doc("Supplier", po.supplier)
-    #             mobile_no = supplier.mobile_no if hasattr(supplier, 'mobile_no') else None
-                
-    #             if not mobile_no:
-    #                 frappe.log_error(f"No mobile number found for supplier {po.supplier}", "PO Due Reminder Failed")
-    #                 continue
-                
-    #             # Create appropriate message based on due status
-    #             if due_date < today_date:
-    #                 status = "OVERDUE"
-    #             elif due_date == today_date:
-    #                 status = "DUE TODAY"
-    #             else:
-    #                 days_remaining = (due_date - today_date).days
-    #                 status = f"DUE IN {days_remaining} DAYS"
-                
-    #             message = (f"Dear {po.supplier_name},\n\n"
-    #                       f"Payment Reminder: {status}\n"
-    #                       f"Purchase Order: {po.name}\n"
-    #                       f"Installment Amount: ₹{installment.payment_amount}\n"
-    #                       f"Due Date: {installment.due_date}\n\n"
-    #                       f"Please arrange payment at your earliest convenience.\n"
-    #                       f"Thank you for your business.")
-                
-    #             send_whatsapp_message_with_attachment(mobile_no, message, "Purchase Order", po.name)
-                
-    #             # Log this reminder to the PO's comment section
-    #             frappe.get_doc({
-    #                 "doctype": "Comment",
-    #                 "comment_type": "Info",
-    #                 "reference_doctype": "Purchase Order", 
-    #                 "reference_name": po.name,
-    #                 "content": f"Payment reminder sent on {nowdate()} for installment due on {installment.due_date}"
-    #             }).insert(ignore_permissions=True)
-                
-    #             # Also create a timeline entry
-    #             po_doc.add_comment("Info", 
-    #                              f"Payment reminder sent for ₹{installment.payment_amount} due on {installment.due_date}")
+# Backward compatibility functions
+def send_whatsapp_message_with_attachment(receiver_id, message, doctype, docname, 
+                                        print_format="Standard", fallback_to_text=False):
+    """Backward compatibility wrapper"""
+    whatsapp_handler = WhatsAppHandler()
+    pdf_content = PDFGenerator.generate_pdf(doctype, docname, print_format)
+    return whatsapp_handler.send_message(receiver_id, message, doctype, docname, 
+                                       pdf_content, fallback_to_text)

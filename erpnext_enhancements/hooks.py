@@ -17,7 +17,16 @@ jenv = {
 
 doc_events = {
     "*": {
-        "on_submit": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification"
+        "on_submit": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification",
+        "before_save": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification"
+    }
+}
+
+scheduler_events = {
+    "daily": [
+        "erpnext_enhancements.api.whatsapp_reminders.whatsapp.send_scheduled_whatsapp_reminders"
+    ]
+}
 
         #Recurrsion Error will look into it
 
@@ -25,8 +34,6 @@ doc_events = {
         # "after_insert": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification",
         # "on_update": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification",
         # "after_save": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification",
-    }
-}
 
 
 
