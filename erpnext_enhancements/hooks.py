@@ -15,13 +15,23 @@ jenv = {
     "jinja": ["erpnext_enhancements.templates.includes.po_review_modal_template"]
 }
 
+# doc_events = {
+#     "*": {
+#         "on_submit": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_submit",
+#         "before_save": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_save",
+#         "on_cancel": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_cancel"
+#     }
+# }
 doc_events = {
     "*": {
-        "on_submit": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification",
-        "before_save": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_save"
+        "on_submit": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_submit",
+        "before_save": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_save",
+        "on_cancel": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_cancel",
+        "after_insert": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_creation",
+        "on_update": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_update"
     }
 }
-
+# KEEP your existing scheduler_events as is:
 scheduler_events = {
     "daily": [
         "erpnext_enhancements.api.whatsapp_reminders.whatsapp.send_scheduled_whatsapp_reminders"

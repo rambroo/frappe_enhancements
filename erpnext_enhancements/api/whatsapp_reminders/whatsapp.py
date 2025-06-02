@@ -194,9 +194,78 @@ class MessageTemplateHandler:
             return text
     
     @staticmethod
-    def build_message(doc, doctype_setting, is_reminder=False, target_date=None):
+    def build_message(doc, doctype_setting, is_reminder=False, target_date=None, trigger_event=None):
         """Build WhatsApp message using template or default format"""
+        
         try:
+            # Handle On Creation events
+            if trigger_event == "On Creation":
+                # Try custom template first for creation events
+                if doctype_setting.custom_template:
+                    template_doc = frappe.get_doc("WhatsApp Message Template", 
+                                                doctype_setting.custom_template)
+                    
+                    if template_doc and template_doc.is_active and template_doc.template_text:
+                        return MessageTemplateHandler._process_template(
+                            template_doc.template_text, doc, target_date
+                        )
+                
+                # Default creation message
+                return MessageTemplateHandler._build_default_message(doc, is_reminder=False, target_date=target_date, trigger_event=trigger_event)
+
+            # Handle On Update events
+            if trigger_event == "On Update":
+                # Try custom template first for update events
+                if doctype_setting.custom_template:
+                    template_doc = frappe.get_doc("WhatsApp Message Template", 
+                                                doctype_setting.custom_template)
+                    
+                    if template_doc and template_doc.is_active and template_doc.template_text:
+                        return MessageTemplateHandler._process_template(
+                            template_doc.template_text, doc, target_date
+                        )
+                
+                # Default update message
+                return MessageTemplateHandler._build_default_message(doc, is_reminder=False, target_date=target_date, trigger_event=trigger_event)
+
+
+            # Handle different trigger events
+            if trigger_event == "Cancel":
+                # Try custom template first for cancel events
+                if doctype_setting.custom_template:
+                    template_doc = frappe.get_doc("WhatsApp Message Template", 
+                                                doctype_setting.custom_template)
+                    
+                    if template_doc and template_doc.is_active and template_doc.template_text:
+                        return MessageTemplateHandler._process_template(
+                            template_doc.template_text, doc, target_date
+                        )
+                
+                # Default cancel message
+                return f"{doc.doctype} *{doc.name}* has been cancelled."
+            
+            # Handle scheduled reminders
+            if trigger_event == "Scheduled Reminder" or is_reminder:
+                # Try reminder message field first
+                if doctype_setting.reminder_message:
+                    return MessageTemplateHandler._process_template(
+                        doctype_setting.reminder_message, doc, target_date
+                    )
+                
+                # Try custom template for reminders
+                if doctype_setting.custom_template:
+                    template_doc = frappe.get_doc("WhatsApp Message Template", 
+                                                doctype_setting.custom_template)
+                    
+                    if template_doc and template_doc.is_active and template_doc.template_text:
+                        return MessageTemplateHandler._process_template(
+                            template_doc.template_text, doc, target_date
+                        )
+                
+                # Default reminder message
+                return MessageTemplateHandler._build_default_message(doc, is_reminder=True, target_date=target_date)
+            
+            # Handle Submit/Save events
             # Try custom template first
             if doctype_setting.custom_template:
                 template_doc = frappe.get_doc("WhatsApp Message Template", 
@@ -207,19 +276,15 @@ class MessageTemplateHandler:
                         template_doc.template_text, doc, target_date
                     )
             
-            # Try reminder message field for reminders
-            if is_reminder and doctype_setting.reminder_message:
-                return MessageTemplateHandler._process_template(
-                    doctype_setting.reminder_message, doc, target_date
-                )
-            
-            # Default message
-            return MessageTemplateHandler._build_default_message(doc, is_reminder, target_date)
+            # Default message for Submit/Save
+            return MessageTemplateHandler._build_default_message(doc, is_reminder=False, target_date=target_date, trigger_event=trigger_event)
             
         except Exception as e:
             frappe.log_error(f"Error building message: {str(e)}", 
                            f"WhatsApp Template Error - {doc.doctype}")
-            return MessageTemplateHandler._build_fallback_message(doc, is_reminder, target_date)
+            return MessageTemplateHandler._build_fallback_message(doc, is_reminder, target_date, trigger_event)
+
+
     
     @staticmethod
     def _process_template(template_text, doc, target_date=None):
@@ -313,27 +378,61 @@ class MessageTemplateHandler:
         return placeholders
     
     @staticmethod
-    def _build_default_message(doc, is_reminder=False, target_date=None):
+    def _build_default_message(doc, is_reminder=False, target_date=None, trigger_event=None):
         """Build default message format"""
-        if is_reminder:
-            return f"Reminder: Your document {doc.name} is due on {target_date}."
+        if is_reminder or trigger_event == "Scheduled Reminder":
+            if target_date:
+                return f"Reminder: Your document {doc.name} is due on {target_date}."
+            else:
+                return f"Reminder: Your document {doc.name} requires attention."
         
-        message = f"{doc.doctype} *{doc.name}* has been submitted."
+        # Different messages based on trigger event
+        # Different messages based on trigger event
+        if trigger_event == "Submit":
+            message = f"{doc.doctype} *{doc.name}* has been submitted."
+        elif trigger_event == "Save":
+            message = f"{doc.doctype} *{doc.name}* has been saved."
+        elif trigger_event == "Cancel":
+            message = f"{doc.doctype} *{doc.name}* has been cancelled."
+        elif trigger_event == "On Creation":
+            message = f"New {doc.doctype} *{doc.name}* has been created."
+        elif trigger_event == "On Update":
+            message = f"{doc.doctype} *{doc.name}* has been updated."
+        else:
+            message = f"{doc.doctype} *{doc.name}* has been processed."
         
         amount = getattr(doc, "grand_total", None) or getattr(doc, "total", None)
         if amount:
             message += f"\nTotal Amount: ₹{amount}"
         
-        message += "\n\nPlease see attached document."
+        # Add PDF note only for non-cancel events
+        if trigger_event != "Cancel":
+            message += "\n\nPlease see attached document."
+        
         return message
     
     @staticmethod
-    def _build_fallback_message(doc, is_reminder=False, target_date=None):
+    def _build_fallback_message(doc, is_reminder=False, target_date=None, trigger_event=None):
         """Build basic fallback message"""
-        if is_reminder:
-            return f"Reminder: Document {doc.name} due on {target_date}."
-        return f"{doc.doctype} {doc.name} has been submitted."
-
+        if is_reminder or trigger_event == "Scheduled Reminder":
+            if target_date:
+                return f"Reminder: Document {doc.name} due on {target_date}."
+            else:
+                return f"Reminder: Document {doc.name} requires attention."
+        
+        if trigger_event == "Cancel":
+            return f"{doc.doctype} {doc.name} has been cancelled."
+        elif trigger_event == "Submit":
+            return f"{doc.doctype} {doc.name} has been submitted."
+        elif trigger_event == "Save":
+            return f"{doc.doctype} {doc.name} has been saved."
+        elif trigger_event == "On Creation":
+            return f"New {doc.doctype} {doc.name} has been created."
+        elif trigger_event == "On Update":
+            return f"{doc.doctype} {doc.name} has been updated."
+        else:
+            return f"{doc.doctype} {doc.name} has been processed."
+        
 
 class PDFGenerator:
     """Handles PDF generation with multiple fallback methods"""
@@ -473,7 +572,6 @@ def get_phone_number(doc, phone_field):
     return None
 
 
-# Main entry points
 def send_scheduled_whatsapp_reminders():
     """Main function to send scheduled WhatsApp reminders"""
     settings = frappe.get_single("WhatsApp Settings")
@@ -481,10 +579,16 @@ def send_scheduled_whatsapp_reminders():
         frappe.log_error("WhatsApp reminders skipped", "WhatsApp Settings disabled")
         return
 
-    for doctype_config in settings.whatsapp_doctypes:
-        if not doctype_config.schedule_enabled or not doctype_config.date_field:
-            continue
+    # Get all scheduled reminder configurations
+    scheduled_configs = [
+        config for config in settings.whatsapp_doctypes
+        if (config.schedule_enabled and 
+            config.enable_whatsapp and
+            config.trigger_event == "Scheduled Reminder" and
+            config.date_field)
+    ]
 
+    for doctype_config in scheduled_configs:
         try:
             process_scheduled_whatsapp_reminder(doctype_config)
         except Exception as e:
@@ -493,20 +597,35 @@ def send_scheduled_whatsapp_reminders():
             continue
 
 
+
 def process_scheduled_whatsapp_reminder(config):
     """Process scheduled reminders for a specific doctype configuration"""
     date_field = config.date_field
-    target_date = add_days(nowdate(), config.days_before or 0)
+    
+    # Calculate target date based on trigger timing
+    if config.trigger_timing == "Days Before":
+        target_date = add_days(nowdate(), config.days_before or 0)
+    elif config.trigger_timing == "Days After":
+        target_date = add_days(nowdate(), -(config.days_after or 0))
+    else:
+        # Default to current date for immediate scheduled reminders
+        target_date = nowdate()
     
     filters = {f"{date_field}": target_date}
     
-    # Exclude cancelled documents
-    if config.table_doctype in ["Purchase Order", "Sales Order", 
-                               "Purchase Invoice", "Sales Invoice"]:
+    # Exclude cancelled documents for submittable doctypes
+    submittable_doctypes = ["Purchase Order", "Sales Order", 
+                           "Purchase Invoice", "Sales Invoice", 
+                           "Delivery Note", "Purchase Receipt"]
+    
+    if config.table_doctype in submittable_doctypes:
         filters["docstatus"] = ["!=", 2]
     
-    docs = frappe.get_all(config.table_doctype, filters=filters, 
-                         fields=["name", "docstatus"])
+    docs = frappe.get_all(
+        config.table_doctype, 
+        filters=filters, 
+        fields=["name", "docstatus"] if config.table_doctype in submittable_doctypes else ["name"]
+    )
 
     whatsapp_handler = WhatsAppHandler()
     success_count = error_count = 0
@@ -527,10 +646,13 @@ def process_scheduled_whatsapp_reminder(config):
                 error_count += 1
                 continue
 
-            # Build message and send
-            message = MessageTemplateHandler.build_message(doc, config, 
-                                                         is_reminder=True, 
-                                                         target_date=target_date)
+            # Build message for scheduled reminder
+            message = MessageTemplateHandler.build_message(
+                doc, config, 
+                is_reminder=True, 
+                target_date=target_date,
+                trigger_event="Scheduled Reminder"
+            )
             
             # Try with PDF attachment
             pdf_content = PDFGenerator.generate_pdf(doc.doctype, doc.name)
@@ -548,104 +670,107 @@ def process_scheduled_whatsapp_reminder(config):
 
     # Log summary
     if success_count > 0 or error_count > 0:
-        frappe.log_error(f"Reminders processed - Success: {success_count}, Errors: {error_count}", 
-                        f"WhatsApp Reminder Summary - {config.table_doctype}")
-
-
-def handle_whatsapp_notification(doc, method):
-    """Handle WhatsApp notification for submitted documents"""
-    try:
-        # Skip cancelled documents
-        if hasattr(doc, 'docstatus') and doc.docstatus == 2:
-            return
-            
-        settings = frappe.get_single("WhatsApp Settings")
-        if not settings.enabled:
-            return
-
-        # Find matching DocType configuration
-        doctype_setting = next(
-            (d for d in settings.whatsapp_doctypes 
-             if d.enable_whatsapp and d.table_doctype.strip() == doc.doctype), 
-            None
+        frappe.log_error(
+            f"Reminders processed - Success: {success_count}, Errors: {error_count}", 
+            f"WhatsApp Reminder Summary - {config.table_doctype}"
         )
-        
-        if not doctype_setting or not doctype_setting.phone_field:
-            return
-        
-        phone = get_phone_number(doc, doctype_setting.phone_field)
-        if not phone:
-            frappe.log_error("No mobile number found", 
-                           f"{doc.doctype} - {doc.name}")
-            return
 
-        # Build message and send
-        whatsapp_handler = WhatsAppHandler()
-        message = MessageTemplateHandler.build_message(doc, doctype_setting)
-        
-        # Generate PDF and send
-        pdf_content = PDFGenerator.generate_pdf(doc.doctype, doc.name)
-        whatsapp_handler.send_message(phone, message, doc.doctype, doc.name, 
-                                    pdf_content, fallback_to_text=True)
 
-    except Exception as e:
-        frappe.log_error(f"WhatsApp notification failed: {str(e)}", 
-                        f"DocType: {doc.doctype}, Name: {doc.name}")
+
+def handle_whatsapp_notification_submit(doc, method):
+    """Handle WhatsApp notification for submitted documents"""
+    _handle_whatsapp_notification(doc, method, "Submit")
+
 
 def handle_whatsapp_notification_save(doc, method):
-    """Handle WhatsApp notification for submitted documents and non-submittable documents on save"""
+    """Handle WhatsApp notification for saved documents (before_save)"""
+    _handle_whatsapp_notification(doc, method, "Save")
+
+
+def handle_whatsapp_notification_cancel(doc, method):
+    """Handle WhatsApp notification for cancelled documents"""
+    _handle_whatsapp_notification(doc, method, "Cancel")
+
+def handle_whatsapp_notification_creation(doc, method):
+    """Handle WhatsApp notification for newly created documents"""
+    _handle_whatsapp_notification(doc, method, "On Creation")
+
+
+def handle_whatsapp_notification_update(doc, method):
+    """Handle WhatsApp notification for updated documents (excluding new documents)"""
+    # Skip if this is a new document
+    if doc.is_new():
+        return
+    _handle_whatsapp_notification(doc, method, "On Update")
+
+
+
+def _handle_whatsapp_notification(doc, method, trigger_event):
+    """Unified WhatsApp notification handler"""
     try:
-        # Skip cancelled documents
-        if hasattr(doc, 'docstatus') and doc.docstatus == 2:
-            return
-            
         settings = frappe.get_single("WhatsApp Settings")
         if not settings.enabled:
             return
 
-        # Find matching DocType configuration
-        doctype_setting = next(
-            (d for d in settings.whatsapp_doctypes 
-             if d.enable_whatsapp and d.table_doctype.strip() == doc.doctype), 
-            None
-        )
+        # Find matching DocType configurations for this trigger event
+        matching_configs = [
+            d for d in settings.whatsapp_doctypes 
+            if (d.enable_whatsapp and 
+                d.table_doctype.strip() == doc.doctype and
+                d.trigger_event == trigger_event and
+                d.trigger_timing == "Immediate")  # Only immediate triggers for doc events
+        ]
         
-        if not doctype_setting or not doctype_setting.phone_field:
-            return
-        
-        # Check if document is submittable
-        meta = frappe.get_meta(doc.doctype)
-        is_submittable = meta.is_submittable
-        
-        # For submittable documents, only proceed if document is submitted (docstatus = 1)
-        # For non-submittable documents, proceed on save (docstatus = 0 or no docstatus)
-        if is_submittable:
-            # Only send notification for submitted documents
-            if not (hasattr(doc, 'docstatus') and doc.docstatus == 1):
-                return
-        else:
-            # For non-submittable documents, send notification on save
-            # These documents can only be saved (docstatus = 0 or no docstatus field)
-            pass
-        
-        phone = get_phone_number(doc, doctype_setting.phone_field)
-        if not phone:
-            frappe.log_error("No mobile number found", 
-                           f"{doc.doctype} - {doc.name}")
+        if not matching_configs:
             return
 
-        # Build message and send
         whatsapp_handler = WhatsAppHandler()
-        message = MessageTemplateHandler.build_message(doc, doctype_setting)
         
-        # Generate PDF and send
-        pdf_content = PDFGenerator.generate_pdf(doc.doctype, doc.name)
-        whatsapp_handler.send_message(phone, message, doc.doctype, doc.name, 
-                                    pdf_content, fallback_to_text=True)
+        for doctype_setting in matching_configs:
+            try:
+                _process_whatsapp_config(doc, doctype_setting, whatsapp_handler)
+            except Exception as e:
+                frappe.log_error(
+                    f"Config processing failed for {doctype_setting.table_doctype}: {str(e)}", 
+                    f"WhatsApp Config Error - {doc.doctype}"
+                )
+                continue
 
     except Exception as e:
         frappe.log_error(f"WhatsApp notification failed: {str(e)}", 
                         f"DocType: {doc.doctype}, Name: {doc.name}")
+
+
+def _process_whatsapp_config(doc, doctype_setting, whatsapp_handler):
+    """Process individual WhatsApp configuration"""
+    if not doctype_setting.phone_field:
+        frappe.log_error("No phone field configured", 
+                       f"{doc.doctype} - {doc.name}")
+        return
+    
+    phone = get_phone_number(doc, doctype_setting.phone_field)
+    if not phone:
+        frappe.log_error("No mobile number found", 
+                       f"{doc.doctype} - {doc.name}")
+        return
+
+    # Build message based on trigger event
+    message = MessageTemplateHandler.build_message(
+        doc, doctype_setting, 
+        trigger_event=doctype_setting.trigger_event
+    )
+    
+    # Generate PDF and send (skip PDF for cancel events)
+    pdf_content = None
+    if doctype_setting.trigger_event != "Cancel":
+        pdf_content = PDFGenerator.generate_pdf(doc.doctype, doc.name)
+    
+    whatsapp_handler.send_message(
+        phone, message, doc.doctype, doc.name, 
+        pdf_content, fallback_to_text=True
+    )
+
+
 
 # Utility functions
 def test_whatsapp_connection():
@@ -690,3 +815,189 @@ def send_whatsapp_message_with_attachment(receiver_id, message, doctype, docname
     pdf_content = PDFGenerator.generate_pdf(doctype, docname, print_format)
     return whatsapp_handler.send_message(receiver_id, message, doctype, docname, 
                                        pdf_content, fallback_to_text)
+
+
+
+
+
+
+
+
+
+# # Main entry points
+# def send_scheduled_whatsapp_reminders():
+#     """Main function to send scheduled WhatsApp reminders"""
+#     settings = frappe.get_single("WhatsApp Settings")
+#     if not settings.enabled:
+#         frappe.log_error("WhatsApp reminders skipped", "WhatsApp Settings disabled")
+#         return
+
+#     for doctype_config in settings.whatsapp_doctypes:
+#         if not doctype_config.schedule_enabled or not doctype_config.date_field:
+#             continue
+
+#         try:
+#             process_scheduled_whatsapp_reminder(doctype_config)
+#         except Exception as e:
+#             error_msg = f"Scheduler failed for {doctype_config.table_doctype}: {str(e)}"
+#             frappe.log_error(error_msg, f"WhatsApp Scheduler Error")
+#             continue
+
+
+
+# def process_scheduled_whatsapp_reminder(config):
+#     """Process scheduled reminders for a specific doctype configuration"""
+#     date_field = config.date_field
+#     target_date = add_days(nowdate(), config.days_before or 0)
+    
+#     filters = {f"{date_field}": target_date}
+    
+#     # Exclude cancelled documents
+#     if config.table_doctype in ["Purchase Order", "Sales Order", 
+#                                "Purchase Invoice", "Sales Invoice"]:
+#         filters["docstatus"] = ["!=", 2]
+    
+#     docs = frappe.get_all(config.table_doctype, filters=filters, 
+#                          fields=["name", "docstatus"])
+
+#     whatsapp_handler = WhatsAppHandler()
+#     success_count = error_count = 0
+
+#     for d in docs:
+#         try:
+#             # Skip cancelled documents
+#             if hasattr(d, 'docstatus') and d.docstatus == 2:
+#                 continue
+                
+#             doc = frappe.get_doc(config.table_doctype, d.name)
+            
+#             if hasattr(doc, 'docstatus') and doc.docstatus == 2:
+#                 continue
+            
+#             phone = get_phone_number(doc, config.phone_field)
+#             if not phone:
+#                 error_count += 1
+#                 continue
+
+#             # Build message and send
+#             message = MessageTemplateHandler.build_message(doc, config, 
+#                                                          is_reminder=True, 
+#                                                          target_date=target_date)
+            
+#             # Try with PDF attachment
+#             pdf_content = PDFGenerator.generate_pdf(doc.doctype, doc.name)
+            
+#             if whatsapp_handler.send_message(phone, message, doc.doctype, doc.name, 
+#                                            pdf_content, fallback_to_text=True):
+#                 success_count += 1
+#             else:
+#                 error_count += 1
+                
+#         except Exception as e:
+#             frappe.log_error(f"Failed to process reminder for {d.name}: {str(e)}", 
+#                            f"WhatsApp Reminder Error")
+#             error_count += 1
+
+#     # Log summary
+#     if success_count > 0 or error_count > 0:
+#         frappe.log_error(f"Reminders processed - Success: {success_count}, Errors: {error_count}", 
+#                         f"WhatsApp Reminder Summary - {config.table_doctype}")
+
+
+
+
+
+# def handle_whatsapp_notification(doc, method):
+#     """Handle WhatsApp notification for submitted documents"""
+#     try:
+#         # Skip cancelled documents
+#         if hasattr(doc, 'docstatus') and doc.docstatus == 2:
+#             return
+            
+#         settings = frappe.get_single("WhatsApp Settings")
+#         if not settings.enabled:
+#             return
+
+#         # Find matching DocType configuration
+#         doctype_setting = next(
+#             (d for d in settings.whatsapp_doctypes 
+#              if d.enable_whatsapp and d.table_doctype.strip() == doc.doctype), 
+#             None
+#         )
+        
+#         if not doctype_setting or not doctype_setting.phone_field:
+#             return
+        
+#         phone = get_phone_number(doc, doctype_setting.phone_field)
+#         if not phone:
+#             frappe.log_error("No mobile number found", 
+#                            f"{doc.doctype} - {doc.name}")
+#             return
+
+#         # Build message and send
+#         whatsapp_handler = WhatsAppHandler()
+#         message = MessageTemplateHandler.build_message(doc, doctype_setting)
+        
+#         # Generate PDF and send
+#         pdf_content = PDFGenerator.generate_pdf(doc.doctype, doc.name)
+#         whatsapp_handler.send_message(phone, message, doc.doctype, doc.name, 
+#                                     pdf_content, fallback_to_text=True)
+
+#     except Exception as e:
+#         frappe.log_error(f"WhatsApp notification failed: {str(e)}", 
+#                         f"DocType: {doc.doctype}, Name: {doc.name}")
+
+# def handle_whatsapp_notification_save(doc, method):
+#     """Handle WhatsApp notification for submitted documents and non-submittable documents on save"""
+#     try:
+#         # Skip cancelled documents
+#         if hasattr(doc, 'docstatus') and doc.docstatus == 2:
+#             return
+            
+#         settings = frappe.get_single("WhatsApp Settings")
+#         if not settings.enabled:
+#             return
+
+#         # Find matching DocType configuration
+#         doctype_setting = next(
+#             (d for d in settings.whatsapp_doctypes 
+#              if d.enable_whatsapp and d.table_doctype.strip() == doc.doctype), 
+#             None
+#         )
+        
+#         if not doctype_setting or not doctype_setting.phone_field:
+#             return
+        
+#         # Check if document is submittable
+#         meta = frappe.get_meta(doc.doctype)
+#         is_submittable = meta.is_submittable
+        
+#         # For submittable documents, only proceed if document is submitted (docstatus = 1)
+#         # For non-submittable documents, proceed on save (docstatus = 0 or no docstatus)
+#         if is_submittable:
+#             # Only send notification for submitted documents
+#             if not (hasattr(doc, 'docstatus') and doc.docstatus == 1):
+#                 return
+#         else:
+#             # For non-submittable documents, send notification on save
+#             # These documents can only be saved (docstatus = 0 or no docstatus field)
+#             pass
+        
+#         phone = get_phone_number(doc, doctype_setting.phone_field)
+#         if not phone:
+#             frappe.log_error("No mobile number found", 
+#                            f"{doc.doctype} - {doc.name}")
+#             return
+
+#         # Build message and send
+#         whatsapp_handler = WhatsAppHandler()
+#         message = MessageTemplateHandler.build_message(doc, doctype_setting)
+        
+#         # Generate PDF and send
+#         pdf_content = PDFGenerator.generate_pdf(doc.doctype, doc.name)
+#         whatsapp_handler.send_message(phone, message, doc.doctype, doc.name, 
+#                                     pdf_content, fallback_to_text=True)
+
+#     except Exception as e:
+#         frappe.log_error(f"WhatsApp notification failed: {str(e)}", 
+#                         f"DocType: {doc.doctype}, Name: {doc.name}")
