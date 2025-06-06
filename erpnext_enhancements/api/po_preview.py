@@ -71,13 +71,22 @@ def render_po_review_template(purchase_order):
         order_discount = so.discount_amount or 0
 
         sales_total_discount += (item_discount_total + order_discount)
+        # Fetch commission_rate from linked Sales Invoice
+        commission_rate = None
+        invoices = frappe.get_all("Sales Invoice", filters={
+            "sales_order": so.name,
+            "docstatus": 1
+        }, fields=["name", "commission_rate"], order_by="posting_date desc")
+
+        if invoices:
+            commission_rate = invoices[0].commission_rate
 
         sales_details.append({
             "order_id": so.name,
             "customer": so.customer,
             "salesman": salesperson,
             "influencer": so.sales_partner,
-            "commission_value": so.commission_rate,
+            "commission_value": commission_rate,
             "advance_amount": advance_payment.paid_amount or 0,
             "credit_limit": credit_limit,
             "overall_discount": order_discount,
