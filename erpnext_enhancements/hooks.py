@@ -7,13 +7,13 @@ app_license = "mit"
 
 # Apps
 # ------------------
-doctype_js = {
-    "Purchase Order": "public/js/purchase_order_review.js"
-}
+# doctype_js = {
+#     "Purchase Order": "public/js/purchase_order_review.js"
+# }
 
-jenv = {
-    "jinja": ["erpnext_enhancements.templates.includes.po_review_modal_template"]
-}
+# jenv = {
+#     "jinja": ["erpnext_enhancements.templates.includes.po_review_modal_template"]
+# }
 
 # doc_events = {
 #     "*": {

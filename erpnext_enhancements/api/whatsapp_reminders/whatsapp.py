@@ -641,7 +641,7 @@ def process_scheduled_whatsapp_reminder(config):
             if hasattr(doc, 'docstatus') and doc.docstatus == 2:
                 continue
             
-            phone = get_phone_number(doc, config.phone_field)
+            phone = get_phone_number_enhanced(doc, config.phone_field)
             if not phone:
                 error_count += 1
                 continue
@@ -742,16 +742,75 @@ def _handle_whatsapp_notification(doc, method, trigger_event):
 
 
 def _process_whatsapp_config(doc, doctype_setting, whatsapp_handler):
-    """Process individual WhatsApp configuration"""
+    """
+    Modified to handle multiple assigned users
+    Process individual WhatsApp configuration
+    """
     if not doctype_setting.phone_field:
-        frappe.log_error("No phone field configured", 
-                       f"{doc.doctype} - {doc.name}")
+        frappe.log_error("No phone field configured", f"{doc.doctype} - {doc.name}")
         return
     
-    phone = get_phone_number(doc, doctype_setting.phone_field)
+    # Check if this is an assigned_to field configuration
+    if doctype_setting.phone_field.strip() == "assigned_to":
+        # Handle multiple assignments
+        assigned_phones = get_assigned_user_phone_numbers(doc)
+        
+        if not assigned_phones:
+            frappe.log_error("No assigned users with phone numbers found", 
+                           f"{doc.doctype} - {doc.name}")
+            return
+        
+        # Build message once
+        message = MessageTemplateHandler.build_message(
+            doc, doctype_setting, 
+            trigger_event=doctype_setting.trigger_event
+        )
+        
+        # Generate PDF once (skip for cancel events)
+        pdf_content = None
+        if doctype_setting.trigger_event != "Cancel":
+            pdf_content = PDFGenerator.generate_pdf(doc.doctype, doc.name)
+        
+        # Send to all assigned users
+        success_count = 0
+        error_count = 0
+        
+        for assigned_user in assigned_phones:
+            try:
+                if whatsapp_handler.send_message(
+                    assigned_user['phone'], message, doc.doctype, doc.name, 
+                    pdf_content, fallback_to_text=True
+                ):
+                    success_count += 1
+                    frappe.log_error(
+                        f"WhatsApp sent to assigned user {assigned_user['user']}", 
+                        f"Assignment Success - {doc.doctype}"
+                    )
+                else:
+                    error_count += 1
+                    frappe.log_error(
+                        f"WhatsApp failed for assigned user {assigned_user['user']}", 
+                        f"Assignment Error - {doc.doctype}"
+                    )
+            except Exception as send_error:
+                error_count += 1
+                frappe.log_error(
+                    f"Error sending to {assigned_user['user']}: {str(send_error)}", 
+                    f"Assignment Send Error - {doc.doctype}"
+                )
+        
+        # Log summary
+        frappe.log_error(
+            f"Assignment notifications: {success_count} sent, {error_count} failed", 
+            f"Assignment Summary - {doc.doctype}"
+        )
+        
+        return
+    
+    # Handle single phone number (existing functionality)
+    phone = get_phone_number_enhanced(doc, doctype_setting.phone_field)
     if not phone:
-        frappe.log_error("No mobile number found", 
-                       f"{doc.doctype} - {doc.name}")
+        frappe.log_error("No mobile number found", f"{doc.doctype} - {doc.name}")
         return
 
     # Build message based on trigger event
@@ -816,188 +875,208 @@ def send_whatsapp_message_with_attachment(receiver_id, message, doctype, docname
     return whatsapp_handler.send_message(receiver_id, message, doctype, docname, 
                                        pdf_content, fallback_to_text)
 
-
-
-
-
-
-
-
-
-# # Main entry points
-# def send_scheduled_whatsapp_reminders():
-#     """Main function to send scheduled WhatsApp reminders"""
-#     settings = frappe.get_single("WhatsApp Settings")
-#     if not settings.enabled:
-#         frappe.log_error("WhatsApp reminders skipped", "WhatsApp Settings disabled")
-#         return
-
-#     for doctype_config in settings.whatsapp_doctypes:
-#         if not doctype_config.schedule_enabled or not doctype_config.date_field:
-#             continue
-
-#         try:
-#             process_scheduled_whatsapp_reminder(doctype_config)
-#         except Exception as e:
-#             error_msg = f"Scheduler failed for {doctype_config.table_doctype}: {str(e)}"
-#             frappe.log_error(error_msg, f"WhatsApp Scheduler Error")
-#             continue
-
-
-
-# def process_scheduled_whatsapp_reminder(config):
-#     """Process scheduled reminders for a specific doctype configuration"""
-#     date_field = config.date_field
-#     target_date = add_days(nowdate(), config.days_before or 0)
+def get_phone_number_enhanced(doc, phone_field):
+    """
+    Enhanced phone number getter that supports:
+    1. Regular fields (mobile_no, customer.mobile_no)
+    2. User fields (owner, modified_by, assigned_to)
+    3. Custom user references
+    """
+    if not phone_field:
+        return None
     
-#     filters = {f"{date_field}": target_date}
+    phone_field = phone_field.strip()
     
-#     # Exclude cancelled documents
-#     if config.table_doctype in ["Purchase Order", "Sales Order", 
-#                                "Purchase Invoice", "Sales Invoice"]:
-#         filters["docstatus"] = ["!=", 2]
+    # Check if it's a user-based field
+    user_fields = [
+        'owner',           # Document creator
+        'modified_by',     # Last person who modified
+        'assigned_to',     # Assigned user (special handling via ToDo)
+        'created_by',      # Alternative field name
+        'approved_by',     # Approval workflows
+        'submitted_by'     # Submission user
+    ]
     
-#     docs = frappe.get_all(config.table_doctype, filters=filters, 
-#                          fields=["name", "docstatus"])
+    # Handle user-based fields
+    if phone_field in user_fields:
+        return get_user_phone_number(doc, phone_field)
+    
+    # Handle user field with custom suffix (e.g., "owner.mobile_no")
+    if '.' in phone_field:
+        parts = phone_field.split('.')
+        if len(parts) == 2 and parts[0] in user_fields:
+            # This is a user field, get user's phone
+            return get_user_phone_number(doc, parts[0])
+    
+    # Handle regular fields (existing functionality)
+    return get_phone_number(doc, phone_field)
 
-#     whatsapp_handler = WhatsAppHandler()
-#     success_count = error_count = 0
 
-#     for d in docs:
-#         try:
-#             # Skip cancelled documents
-#             if hasattr(d, 'docstatus') and d.docstatus == 2:
-#                 continue
+def get_user_phone_number(doc, user_field):
+    """
+    Get phone number from a User document based on user field
+    Handles special case for assigned_to field which uses ToDo doctype
+    Modified to handle multiple assignments
+    """
+    try:
+        # Special handling for assigned_to field - now returns multiple numbers
+        if user_field == "assigned_to":
+            assigned_phones = get_assigned_user_phone_numbers(doc)
+            if assigned_phones:
+                # For backward compatibility, return the first phone number
+                # But log that multiple assignments were found
+                if len(assigned_phones) > 1:
+                    frappe.log_error(
+                        f"Multiple assignments found ({len(assigned_phones)}), using first one. "
+                        f"Consider using get_assigned_user_phone_numbers() for full list.", 
+                        f"Multiple Assignment Warning - {doc.doctype}"
+                    )
+                return assigned_phones[0]['phone']
+            return None
+        
+        # Handle regular user fields (existing functionality)
+        username = getattr(doc, user_field, None)
+        if not username:
+            return None
+        
+        # Get User document
+        user_doc = frappe.get_doc("User", username)
+        
+        # Try multiple phone fields in User doctype
+        phone_fields_to_try = [
+            'mobile_no',      # Standard mobile field
+            'phone',          # Alternative phone field
+            'cell_number',    # Some customizations use this
+            'whatsapp_number' # Custom WhatsApp field if you have one
+        ]
+        
+        for field in phone_fields_to_try:
+            if hasattr(user_doc, field):
+                phone = getattr(user_doc, field)
+                if phone:
+                    cleaned_phone = WhatsAppHandler()._clean_phone_number(phone)
+                    if cleaned_phone:
+                        return cleaned_phone
+        
+        # Log if no phone found
+        frappe.log_error(
+            f"No phone number found for user {username}", 
+            f"User Phone Lookup - {doc.doctype}"
+        )
+        return None
+        
+    except Exception as e:
+        frappe.log_error(
+            f"Error getting user phone for {user_field}: {str(e)}", 
+            f"User Phone Error - {doc.doctype}"
+        )
+        return None
+    
+
+def get_assigned_user_phone_numbers(doc):
+    """
+    Get phone numbers for ALL assigned users from ToDo doctype
+    Returns a list of phone numbers for all assigned users
+    """
+    try:
+        # Find all active ToDo entries for this document
+        todo_filters = {
+            "reference_type": doc.doctype,
+            "reference_name": doc.name,
+            "status": "Open"  # Only get active assignments
+        }
+        
+        # Get ALL assignments (removed limit=1)
+        todos = frappe.get_all(
+            "ToDo",
+            filters=todo_filters,
+            fields=["allocated_to"],
+            order_by="creation desc"
+        )
+        
+        if not todos:
+            # Try without status filter in case assignments are closed but still relevant
+            todos = frappe.get_all(
+                "ToDo",
+                filters={
+                    "reference_type": doc.doctype,
+                    "reference_name": doc.name
+                },
+                fields=["allocated_to"],
+                order_by="creation desc"
+            )
+        
+        if not todos:
+            frappe.log_error(
+                f"No assignments found for {doc.doctype} {doc.name}", 
+                f"Assignment Phone Lookup - {doc.doctype}"
+            )
+            return []
+        
+        phone_numbers = []
+        processed_users = set()  # Avoid duplicates if same user has multiple todos
+        
+        for todo in todos:
+            if not todo.allocated_to or todo.allocated_to in processed_users:
+                continue
                 
-#             doc = frappe.get_doc(config.table_doctype, d.name)
+            processed_users.add(todo.allocated_to)
             
-#             if hasattr(doc, 'docstatus') and doc.docstatus == 2:
-#                 continue
-            
-#             phone = get_phone_number(doc, config.phone_field)
-#             if not phone:
-#                 error_count += 1
-#                 continue
-
-#             # Build message and send
-#             message = MessageTemplateHandler.build_message(doc, config, 
-#                                                          is_reminder=True, 
-#                                                          target_date=target_date)
-            
-#             # Try with PDF attachment
-#             pdf_content = PDFGenerator.generate_pdf(doc.doctype, doc.name)
-            
-#             if whatsapp_handler.send_message(phone, message, doc.doctype, doc.name, 
-#                                            pdf_content, fallback_to_text=True):
-#                 success_count += 1
-#             else:
-#                 error_count += 1
+            try:
+                # Get User document for the assigned user
+                user_doc = frappe.get_doc("User", todo.allocated_to)
                 
-#         except Exception as e:
-#             frappe.log_error(f"Failed to process reminder for {d.name}: {str(e)}", 
-#                            f"WhatsApp Reminder Error")
-#             error_count += 1
-
-#     # Log summary
-#     if success_count > 0 or error_count > 0:
-#         frappe.log_error(f"Reminders processed - Success: {success_count}, Errors: {error_count}", 
-#                         f"WhatsApp Reminder Summary - {config.table_doctype}")
-
-
-
-
-
-# def handle_whatsapp_notification(doc, method):
-#     """Handle WhatsApp notification for submitted documents"""
-#     try:
-#         # Skip cancelled documents
-#         if hasattr(doc, 'docstatus') and doc.docstatus == 2:
-#             return
-            
-#         settings = frappe.get_single("WhatsApp Settings")
-#         if not settings.enabled:
-#             return
-
-#         # Find matching DocType configuration
-#         doctype_setting = next(
-#             (d for d in settings.whatsapp_doctypes 
-#              if d.enable_whatsapp and d.table_doctype.strip() == doc.doctype), 
-#             None
-#         )
+                # Try multiple phone fields in User doctype
+                phone_fields_to_try = [
+                    'mobile_no',      # Standard mobile field
+                    'phone',          # Alternative phone field
+                    'cell_number',    # Some customizations use this
+                    'whatsapp_number' # Custom WhatsApp field if you have one
+                ]
+                
+                user_phone = None
+                for field in phone_fields_to_try:
+                    if hasattr(user_doc, field):
+                        phone = getattr(user_doc, field)
+                        if phone:
+                            cleaned_phone = WhatsAppHandler()._clean_phone_number(phone)
+                            if cleaned_phone:
+                                user_phone = cleaned_phone
+                                break
+                
+                if user_phone:
+                    phone_numbers.append({
+                        'phone': user_phone,
+                        'user': todo.allocated_to
+                    })
+                    frappe.log_error(
+                        f"Found phone for assigned user {todo.allocated_to}: {user_phone}", 
+                        f"Assignment Phone Success - {doc.doctype}"
+                    )
+                else:
+                    frappe.log_error(
+                        f"No phone number found for assigned user {todo.allocated_to}", 
+                        f"Assignment Phone Lookup - {doc.doctype}"
+                    )
+                    
+            except Exception as user_error:
+                frappe.log_error(
+                    f"Error processing user {todo.allocated_to}: {str(user_error)}", 
+                    f"Assignment User Error - {doc.doctype}"
+                )
+                continue
         
-#         if not doctype_setting or not doctype_setting.phone_field:
-#             return
+        frappe.log_error(
+            f"Found {len(phone_numbers)} phone numbers for {len(processed_users)} assigned users", 
+            f"Assignment Summary - {doc.doctype}"
+        )
         
-#         phone = get_phone_number(doc, doctype_setting.phone_field)
-#         if not phone:
-#             frappe.log_error("No mobile number found", 
-#                            f"{doc.doctype} - {doc.name}")
-#             return
+        return phone_numbers
+        
+    except Exception as e:
+        frappe.log_error(
+            f"Error getting assigned users' phones: {str(e)}", 
+            f"Assignment Phone Error - {doc.doctype}"
+        )
+        return []
 
-#         # Build message and send
-#         whatsapp_handler = WhatsAppHandler()
-#         message = MessageTemplateHandler.build_message(doc, doctype_setting)
-        
-#         # Generate PDF and send
-#         pdf_content = PDFGenerator.generate_pdf(doc.doctype, doc.name)
-#         whatsapp_handler.send_message(phone, message, doc.doctype, doc.name, 
-#                                     pdf_content, fallback_to_text=True)
-
-#     except Exception as e:
-#         frappe.log_error(f"WhatsApp notification failed: {str(e)}", 
-#                         f"DocType: {doc.doctype}, Name: {doc.name}")
-
-# def handle_whatsapp_notification_save(doc, method):
-#     """Handle WhatsApp notification for submitted documents and non-submittable documents on save"""
-#     try:
-#         # Skip cancelled documents
-#         if hasattr(doc, 'docstatus') and doc.docstatus == 2:
-#             return
-            
-#         settings = frappe.get_single("WhatsApp Settings")
-#         if not settings.enabled:
-#             return
-
-#         # Find matching DocType configuration
-#         doctype_setting = next(
-#             (d for d in settings.whatsapp_doctypes 
-#              if d.enable_whatsapp and d.table_doctype.strip() == doc.doctype), 
-#             None
-#         )
-        
-#         if not doctype_setting or not doctype_setting.phone_field:
-#             return
-        
-#         # Check if document is submittable
-#         meta = frappe.get_meta(doc.doctype)
-#         is_submittable = meta.is_submittable
-        
-#         # For submittable documents, only proceed if document is submitted (docstatus = 1)
-#         # For non-submittable documents, proceed on save (docstatus = 0 or no docstatus)
-#         if is_submittable:
-#             # Only send notification for submitted documents
-#             if not (hasattr(doc, 'docstatus') and doc.docstatus == 1):
-#                 return
-#         else:
-#             # For non-submittable documents, send notification on save
-#             # These documents can only be saved (docstatus = 0 or no docstatus field)
-#             pass
-        
-#         phone = get_phone_number(doc, doctype_setting.phone_field)
-#         if not phone:
-#             frappe.log_error("No mobile number found", 
-#                            f"{doc.doctype} - {doc.name}")
-#             return
-
-#         # Build message and send
-#         whatsapp_handler = WhatsAppHandler()
-#         message = MessageTemplateHandler.build_message(doc, doctype_setting)
-        
-#         # Generate PDF and send
-#         pdf_content = PDFGenerator.generate_pdf(doc.doctype, doc.name)
-#         whatsapp_handler.send_message(phone, message, doc.doctype, doc.name, 
-#                                     pdf_content, fallback_to_text=True)
-
-#     except Exception as e:
-#         frappe.log_error(f"WhatsApp notification failed: {str(e)}", 
-#                         f"DocType: {doc.doctype}, Name: {doc.name}")
