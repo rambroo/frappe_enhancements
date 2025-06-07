@@ -1,22 +1,24 @@
-frappe.ui.form.on('Purchase Order', {
+// File: /home/rohan-rambhiya/frappe-bench/apps/erpnext_enhancements/erpnext_enhancements/public/js/payment_entry_review.js
+
+frappe.ui.form.on('Payment Entry', {
     refresh(frm) {
         if (!frm.is_new() && frm.doc.docstatus === 0) {
             frm.add_custom_button('Review Before Submit', () => {
-                show_po_review_modal(frm);
+                show_payment_review_modal(frm);
             });
         }
     }
 });
 
-function show_po_review_modal(frm) {
+function show_payment_review_modal(frm) {
     frappe.call({
-        method: "erpnext_enhancements.api.po_preview.render_po_review_template",
+        method: "erpnext_enhancements.api.payment_preview.render_payment_review_template",
         args: {
-            purchase_order: frm.doc.name
+            payment_entry: frm.doc.name
         },  
         callback: function(response) {
             const modal = new frappe.ui.Dialog({
-                title: 'Review Purchase Order',
+                title: 'Review Payment Entry',
                 size: 'extra-large',
                 primary_action_label: 'Submit',
                 primary_action: () => {

@@ -1,0 +1,99 @@
+<!-- File: apps/erpnext_enhancements/erpnext_enhancements/templates/includes/payment_review_modal_template.html -->
+<div class="payment-review">
+    <h3>Payment Entry Review Summary</h3>
+    
+    <div class="row">
+        <div class="col-md-6">
+            <h4>Payment Details</h4>
+            <table class="table table-bordered">
+                <tr><th>Payment Entry ID</th><td>{{ payment.payment_entry_id }}</td></tr>
+                <tr><th>Payment Type</th><td>{{ payment.payment_type }}</td></tr>
+                <tr><th>Status</th><td>{{ payment.status }}</td></tr>
+                <tr><th>Company</th><td>{{ payment.company }}</td></tr>
+                <tr><th>Mode of Payment</th><td>{{ payment.mode_of_payment or '-' }}</td></tr>
+                <tr><th>Posting Date</th><td>{{ payment.posting_date }}</td></tr>
+            </table>
+        </div>
+        
+        <div class="col-md-6">
+            <h4>Party Information</h4>
+            <table class="table table-bordered">
+                <tr><th>Party Type</th><td>{{ payment.party_type }}</td></tr>
+                <tr><th>Party Name</th><td>{{ payment.party_name }}</td></tr>
+                {% if party_details.customer_group %}
+                <tr><th>Customer Group</th><td>{{ party_details.customer_group }}</td></tr>
+                {% endif %}
+                {% if party_details.territory %}
+                <tr><th>Territory</th><td>{{ party_details.territory }}</td></tr>
+                {% endif %}
+                {% if party_details.customer_type %}
+                <tr><th>Customer Type</th><td>{{ party_details.customer_type }}</td></tr>
+                {% endif %}
+                {% if party_details.supplier_group %}
+                <tr><th>Supplier Group</th><td>{{ party_details.supplier_group }}</td></tr>
+                {% endif %}
+                {% if party_details.supplier_type %}
+                <tr><th>Supplier Type</th><td>{{ party_details.supplier_type }}</td></tr>
+                {% endif %}
+            </table>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <h4>Account Information</h4>
+            <table class="table table-bordered">
+                <tr><th>Paid From</th><td>{{ payment.paid_from or '-' }}</td></tr>
+                <tr><th>Paid To</th><td>{{ payment.paid_to or '-' }}</td></tr>
+            </table>
+        </div>
+        
+        <div class="col-md-6">
+            <h4>Amount Details</h4>
+            <table class="table table-bordered">
+                <tr><th>{{ payment.payment_type }} Amount</th><td><strong>{{ "₹{:,.2f}".format(payment.main_amount) }}</strong></td></tr>
+                {% if payment.total_allocated_amount %}
+                <tr><th>Total Allocated Amount</th><td>{{ "₹{:,.2f}".format(payment.total_allocated_amount) }}</td></tr>
+                {% endif %}
+                {% if payment.unallocated_amount %}
+                <tr><th>Unallocated Amount</th><td>{{ "₹{:,.2f}".format(payment.unallocated_amount) }}</td></tr>
+                {% endif %}
+                {% if payment.difference_amount %}
+                <tr><th>Difference Amount</th><td>{{ "₹{:,.2f}".format(payment.difference_amount) }}</td></tr>
+                {% endif %}
+            </table>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-12">
+            <h4>Reference Information</h4>
+            <table class="table table-bordered">
+                {% if payment.reference_no %}
+                <tr><th>Reference Number</th><td>{{ payment.reference_no }}</td></tr>
+                {% endif %}
+                {% if payment.reference_date %}
+                <tr><th>Reference Date</th><td>{{ payment.reference_date }}</td></tr>
+                {% endif %}
+            </table>
+        </div>
+    </div>
+
+    {% if payment.remarks %}
+    <div class="row">
+        <div class="col-md-12">
+            <h4>Remarks</h4>
+            <div class="well">
+                {{ payment.remarks }}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <br/>
+    <div class="alert alert-info">
+        <strong>Summary:</strong> {{ payment.payment_type }} payment of <strong>₹{{ "{:,.2f}".format(payment.main_amount) }}</strong> 
+        {% if payment.payment_type == "Receive" %}from{% else %}to{% endif %} {{ payment.party_name }}
+        {% if payment.mode_of_payment %} via {{ payment.mode_of_payment }}{% endif %}
+    </div>
+</div>

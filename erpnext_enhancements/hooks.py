@@ -9,12 +9,18 @@ app_license = "mit"
 # ------------------
 
 # required_apps = []
+
+# Updated hooks.py
 doctype_js = {
-    "Purchase Order": "public/js/purchase_order_review.js"
+    "Purchase Order": "public/js/purchase_order_review.js",
+    "Payment Entry": "public/js/payment_entry_review.js"
 }
 
 jenv = {
-    "jinja": ["erpnext_enhancements.templates.includes.po_review_modal_template"]
+    "jinja": [
+        "erpnext_enhancements.templates.includes.po_review_modal_template",
+        "erpnext_enhancements.templates.includes.payment_review_modal_template"
+    ]
 }
 # Each item in the list will be shown as an app in the apps page
 # add_to_apps_screen = [
