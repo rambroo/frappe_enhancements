@@ -9,12 +9,16 @@ from frappe.utils.pdf import get_pdf
 
 
 def safe_get_settings():
+    # Check if both main table and child table exist before accessing
+    if not frappe.db.table_exists("WhatsApp Settings") or not frappe.db.table_exists("WhatsApp Doctypes"):
+        return None
+    
     try:
         return frappe.get_single("WhatsApp Settings")
     except Exception as e:
         frappe.log_error(f"Could not load WhatsApp Settings during hook event: {e}")
-        return None
-    
+        return None    
+
 class WhatsAppHandler:
     """Centralized WhatsApp message handler"""
     
