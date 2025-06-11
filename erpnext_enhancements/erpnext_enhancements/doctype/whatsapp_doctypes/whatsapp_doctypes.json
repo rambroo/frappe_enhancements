@@ -20,7 +20,8 @@
   "section_break_3",
   "reminder_message",
   "schedule_enabled",
-  "custom_template"
+  "custom_template",
+  "attach_print"
  ],
  "fields": [
   {
@@ -114,13 +115,19 @@
    "fieldtype": "Link",
    "label": "Custom Template",
    "options": "WhatsApp Message Template"
+  },
+  {
+   "default": "0",
+   "fieldname": "attach_print",
+   "fieldtype": "Check",
+   "label": "Attach Default Print"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2025-06-03 10:29:37.790915",
+ "modified": "2025-06-11 10:27:56.990958",
  "modified_by": "Administrator",
  "module": "erpnext_enhancements",
  "name": "WhatsApp Doctypes",

@@ -404,7 +404,9 @@ class MessageTemplateHandler:
         amount = getattr(doc, "grand_total", None) or getattr(doc, "total", None)
         if amount:
             message += f"\nTotal Amount: ₹{amount}"
-        
+        # Add PDF note only for non-cancel events when PDF is attached
+        # Note: This is optional - you might want to pass attach_print parameter here
+        # For now, keeping the existing behavior
         # Add PDF note only for non-cancel events
         if trigger_event != "Cancel":
             message += "\n\nPlease see attached document."
@@ -451,6 +453,36 @@ class PDFGenerator:
             frappe.log_error(f"Error checking document status: {str(e)}", 
                            f"PDF Generation - {doctype}")
             return None
+        
+        """Generate PDF using working wkhtmltopdf"""
+        
+        try:
+            # Check if document is cancelled
+            doc = frappe.get_doc(doctype, docname)
+            if hasattr(doc, 'docstatus') and doc.docstatus == 2:
+                return None
+        except Exception as e:
+            frappe.log_error(f"Error checking document: {str(e)}", f"PDF - {doctype}")
+            return None
+        
+        try:
+            # Use the working method that was working before
+            html_content = frappe.get_print(doctype, docname, print_format=print_format or "Standard")
+            
+            # Use minimal wkhtmltopdf options
+            from frappe.utils.pdf import get_pdf
+            pdf_content = get_pdf(html_content, {
+                'page-size': 'A4',
+                'encoding': 'UTF-8'
+            })
+            
+            if pdf_content:
+                frappe.log_error("PDF generated successfully", f"PDF Success - {doctype}")
+                return pdf_content
+            
+        except Exception as e:
+            frappe.log_error(f"PDF generation failed: {str(e)}", f"PDF Error - {doctype}")
+        
         
         # Try different PDF generation methods
         methods = [
@@ -655,7 +687,13 @@ def process_scheduled_whatsapp_reminder(config):
             )
             
             # Try with PDF attachment
-            pdf_content = PDFGenerator.generate_pdf(doc.doctype, doc.name)
+            # Generate PDF only if attach_print is enabled
+            pdf_content = None
+            if config.attach_print:
+                pdf_content = PDFGenerator.generate_pdf(doc.doctype, doc.name)
+            # pdf_content = PDFGenerator.generate_pdf(doc.doctype, doc.name)
+
+
             
             if whatsapp_handler.send_message(phone, message, doc.doctype, doc.name, 
                                            pdf_content, fallback_to_text=True):
@@ -768,7 +806,7 @@ def _process_whatsapp_config(doc, doctype_setting, whatsapp_handler):
         
         # Generate PDF once (skip for cancel events)
         pdf_content = None
-        if doctype_setting.trigger_event != "Cancel":
+        if doctype_setting.trigger_event != "Cancel" and doctype_setting.attach_print:
             pdf_content = PDFGenerator.generate_pdf(doc.doctype, doc.name)
         
         # Send to all assigned users
@@ -821,7 +859,7 @@ def _process_whatsapp_config(doc, doctype_setting, whatsapp_handler):
     
     # Generate PDF and send (skip PDF for cancel events)
     pdf_content = None
-    if doctype_setting.trigger_event != "Cancel":
+    if doctype_setting.trigger_event != "Cancel" and doctype_setting.attach_print:
         pdf_content = PDFGenerator.generate_pdf(doc.doctype, doc.name)
     
     whatsapp_handler.send_message(
