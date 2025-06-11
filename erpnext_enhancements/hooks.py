@@ -110,6 +110,7 @@ jenv = {
 
 # before_app_install = "erpnext_enhancements.utils.before_app_install"
 # after_app_install = "erpnext_enhancements.utils.after_app_install"
+after_install = "erpnext_enhancements.install.after_install"
 
 # Integration Cleanup
 # -------------------
@@ -254,3 +255,17 @@ jenv = {
 # 	"Logging DocType Name": 30  # days to retain logs
 # }
 
+fixtures = [
+    {
+        "doctype": "Custom Field",
+        "filters": [
+            [
+                "name",
+                "in",
+                [
+                    "Purchase Order-remarks"
+                ]
+            ]
+        ]
+    }
+]
