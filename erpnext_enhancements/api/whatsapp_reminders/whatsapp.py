@@ -8,13 +8,22 @@ from frappe.utils import get_site_path, add_days, nowdate, date_diff, formatdate
 from frappe.utils.pdf import get_pdf
 
 
+def safe_get_settings():
+    try:
+        return frappe.get_single("WhatsApp Settings")
+    except Exception as e:
+        frappe.log_error(f"Could not load WhatsApp Settings during hook event: {e}")
+        return None
+    
 class WhatsAppHandler:
     """Centralized WhatsApp message handler"""
     
     def __init__(self):
-        self.settings = frappe.get_single("WhatsApp Settings")
+        self.settings = safe_get_settings()
         self.api_url = "https://api.botmastersender.com/api/v2/?action=send"
-    
+        if not self.settings:
+            frappe.throw("WhatsApp Settings not configured or not available")
+
     def is_enabled(self):
         """Check if WhatsApp is enabled and configured"""
         return (self.settings.enabled and 
@@ -606,7 +615,10 @@ def get_phone_number(doc, phone_field):
 
 def send_scheduled_whatsapp_reminders():
     """Main function to send scheduled WhatsApp reminders"""
-    settings = frappe.get_single("WhatsApp Settings")
+    settings = safe_get_settings()
+    if not settings:
+        return
+
     if not settings.enabled:
         frappe.log_error("WhatsApp reminders skipped", "WhatsApp Settings disabled")
         return
@@ -746,7 +758,9 @@ def handle_whatsapp_notification_update(doc, method):
 def _handle_whatsapp_notification(doc, method, trigger_event):
     """Unified WhatsApp notification handler"""
     try:
-        settings = frappe.get_single("WhatsApp Settings")
+        settings = safe_get_settings()
+        if not settings:
+            return
         if not settings.enabled:
             return
 
