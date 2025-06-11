@@ -7,6 +7,9 @@ app_license = "mit"
 
 # Apps
 # ------------------
+# doctype_js = {
+#     "Purchase Order": "public/js/purchase_order_review.js"
+# }
 
 # required_apps = []
 
@@ -22,6 +25,110 @@ jenv = {
         "erpnext_enhancements.templates.includes.payment_review_modal_template"
     ]
 }
+# jenv = {
+#     "jinja": ["erpnext_enhancements.templates.includes.po_review_modal_template"]
+# }
+
+# doc_events = {
+#     "*": {
+#         "on_submit": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_submit",
+#         "before_save": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_save",
+#         "on_cancel": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_cancel"
+#     }
+# }
+doc_events = {
+    "*": {
+        "on_submit": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_submit",
+        "before_save": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_save",
+        "on_cancel": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_cancel",
+        "after_insert": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_creation",
+        "on_update": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_update"
+    }
+}
+# KEEP your existing scheduler_events as is:
+scheduler_events = {
+    "daily": [
+        "erpnext_enhancements.api.whatsapp_reminders.whatsapp.send_scheduled_whatsapp_reminders"
+    ]
+}
+
+        #Recurrsion Error will look into it
+
+        # ,
+        # "after_insert": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification",
+        # "on_update": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification",
+        # "after_save": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification",
+
+
+
+# # Scheduler Events
+# scheduler_events = {
+#     "daily": [
+#         "erpnext_enhancements.api.whatsapp_reminders.whatsapp.send_po_due_reminders"
+#     ]
+# }
+
+
+
+
+
+# # Document Events
+# doc_events = {
+#     # Your existing setup
+#     "Purchase Order": {
+#         "on_submit": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.send_po_notification"
+#     },
+#     # Add WhatsApp notifications to all doctypes
+#     "*": {
+#         "after_insert": "erpnext_enhancements.utils.notification_extension.send_whatsapp_after_notification",
+#         "on_update": "erpnext_enhancements.utils.notification_extension.send_whatsapp_after_notification",
+#         "on_submit": "erpnext_enhancements.utils.notification_extension.send_whatsapp_after_notification",
+#         "on_cancel": "erpnext_enhancements.utils.notification_extension.send_whatsapp_after_notification"
+#     }
+# }
+
+# # Scheduler Events
+# scheduler_events = {
+#     "daily": [
+#         "erpnext_enhancements.api.whatsapp_reminders.whatsapp.send_po_due_reminders"
+#     ]
+# }
+
+
+# // FIREBASE RELATED CHANEGES START
+
+# web_include_js = [
+#     "https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js",
+#     "https://www.gstatic.com/firebasejs/8.10.0/firebase-messaging.js",
+#     "/assets/erpnext_enhancements/js/fcm-init.js"
+# ]
+
+# # Include JS in desk pages (for admin notifications)
+# app_include_js = [
+#     "https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js",          
+#     "https://www.gstatic.com/firebasejs/8.10.0/firebase-messaging.js",
+#     "/assets/erpnext_enhancements/js/fcm-init.js"
+# ]
+
+# # In hooks.py
+# website_route_rules = [
+#     {"from_route": "/firebase-messaging-sw.js", "to_route": "erpnext_enhancements/www/firebase-messaging-sw.js"}
+# ]
+
+# # Document Events
+# # ---------------
+# # Hook on document methods and events
+# doc_events = {
+#     "Purchase Order": {
+#         "on_update": "erpnext_enhancements.notifications.handle_status_change"
+#     }
+#     # Replace "Your DocType" with the actual DocType name you want to monitor
+#     # For example: "Task", "Issue", etc.
+# }
+
+
+# // FIREBASE RELATED CHANEGES END
+
 # Each item in the list will be shown as an app in the apps page
 # add_to_apps_screen = [
 # 	{
