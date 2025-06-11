@@ -11,6 +11,20 @@ app_license = "mit"
 #     "Purchase Order": "public/js/purchase_order_review.js"
 # }
 
+# required_apps = []
+
+# Updated hooks.py
+doctype_js = {
+    "Purchase Order": "public/js/purchase_order_review.js",
+    "Payment Entry": "public/js/payment_entry_review.js"
+}
+
+jenv = {
+    "jinja": [
+        "erpnext_enhancements.templates.includes.po_review_modal_template",
+        "erpnext_enhancements.templates.includes.payment_review_modal_template"
+    ]
+}
 # jenv = {
 #     "jinja": ["erpnext_enhancements.templates.includes.po_review_modal_template"]
 # }
@@ -115,7 +129,6 @@ scheduler_events = {
 
 # // FIREBASE RELATED CHANEGES END
 
-
 # Each item in the list will be shown as an app in the apps page
 # add_to_apps_screen = [
 # 	{
@@ -204,6 +217,7 @@ scheduler_events = {
 
 # before_app_install = "erpnext_enhancements.utils.before_app_install"
 # after_app_install = "erpnext_enhancements.utils.after_app_install"
+after_install = "erpnext_enhancements.install.after_install"
 
 # Integration Cleanup
 # -------------------
@@ -348,3 +362,17 @@ scheduler_events = {
 # 	"Logging DocType Name": 30  # days to retain logs
 # }
 
+fixtures = [
+    {
+        "doctype": "Custom Field",
+        "filters": [
+            [
+                "name",
+                "in",
+                [
+                    "Purchase Order-remarks"
+                ]
+            ]
+        ]
+    }
+]
