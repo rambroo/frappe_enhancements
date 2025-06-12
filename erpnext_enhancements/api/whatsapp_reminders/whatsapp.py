@@ -9,15 +9,19 @@ from frappe.utils.pdf import get_pdf
 
 
 def safe_get_settings():
-    # Check if both main table and child table exist before accessing
-    if not frappe.db.table_exists("WhatsApp Settings") or not frappe.db.table_exists("WhatsApp Doctypes"):
+    # don’t even try to import the controller while the site is installing, migrating or patching
+    if frappe.flags.in_install or frappe.flags.in_patch or frappe.flags.in_migrate:
         return None
-    
+
+    # only proceed if the DocType definition actually exists in the database
+    if not frappe.db.exists("DocType", "WhatsApp Settings"):
+        return None
+
     try:
         return frappe.get_single("WhatsApp Settings")
-    except Exception as e:
-        frappe.log_error(f"Could not load WhatsApp Settings during hook event: {e}")
-        return None    
+    except ImportError as e:
+        frappe.log_error(f"Could not load WhatsApp Settings: {e}", "WhatsApp Settings")
+        return None
 
 class WhatsAppHandler:
     """Centralized WhatsApp message handler"""
