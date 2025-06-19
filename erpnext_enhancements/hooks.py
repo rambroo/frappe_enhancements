@@ -16,6 +16,7 @@ app_license = "mit"
 # Updated hooks.py
 doctype_js = {
     "Purchase Order": "public/js/purchase_order_review.js",
+    "Sales Order": "public/js/sales_order.js",
     "Payment Entry": "public/js/payment_entry_review.js"
 }
 
@@ -25,6 +26,10 @@ jenv = {
         "erpnext_enhancements.templates.includes.payment_review_modal_template"
     ]
 }
+app_include_js = [
+    "assets/erpnext_enhancements/js/sales_order.js"
+]
+
 # jenv = {
 #     "jinja": ["erpnext_enhancements.templates.includes.po_review_modal_template"]
 # }
@@ -51,6 +56,9 @@ scheduler_events = {
         "erpnext_enhancements.api.whatsapp_reminders.whatsapp.send_scheduled_whatsapp_reminders"
     ]
 }
+# override_whitelisted_methods = {
+#     "frappe.desk.search.search_link": "erpnext_enhancements.api.item_search.custom_item_search"
+# }
 
         #Recurrsion Error will look into it
 
