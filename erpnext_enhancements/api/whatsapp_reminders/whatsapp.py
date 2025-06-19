@@ -8,13 +8,30 @@ from frappe.utils import get_site_path, add_days, nowdate, date_diff, formatdate
 from frappe.utils.pdf import get_pdf
 
 
+def safe_get_settings():
+    # don’t even try to import the controller while the site is installing, migrating or patching
+    if frappe.flags.in_install or frappe.flags.in_patch or frappe.flags.in_migrate:
+        return None
+
+    # only proceed if the DocType definition actually exists in the database
+    if not frappe.db.exists("DocType", "WhatsApp Settings"):
+        return None
+
+    try:
+        return frappe.get_single("WhatsApp Settings")
+    except ImportError as e:
+        frappe.log_error(f"Could not load WhatsApp Settings: {e}", "WhatsApp Settings")
+        return None
+
 class WhatsAppHandler:
     """Centralized WhatsApp message handler"""
     
     def __init__(self):
-        self.settings = frappe.get_single("WhatsApp Settings")
+        self.settings = safe_get_settings()
         self.api_url = "https://api.botmastersender.com/api/v2/?action=send"
-    
+        if not self.settings:
+            frappe.throw("WhatsApp Settings not configured or not available")
+
     def is_enabled(self):
         """Check if WhatsApp is enabled and configured"""
         return (self.settings.enabled and 
@@ -439,35 +456,30 @@ class MessageTemplateHandler:
 class PDFGenerator:
     """Handles PDF generation with multiple fallback methods"""
     
+
+    # Modification 1: Update PDFGenerator.generate_pdf method
     @staticmethod
-    def generate_pdf(doctype, docname, print_format="Standard"):
+    def generate_pdf(doctype, docname, print_format=None):
         """Generate PDF with fallback methods"""
+        # If no print format specified, get the default one
+        if not print_format:
+            print_format = PDFGenerator._get_default_print_format(doctype)
+        
         # Check if document is cancelled
         try:
             doc = frappe.get_doc(doctype, docname)
             if hasattr(doc, 'docstatus') and doc.docstatus == 2:
                 frappe.log_error(f"Cannot generate PDF for cancelled document {docname}", 
-                               f"PDF Generation - {doctype}")
+                            f"PDF Generation - {doctype}")
                 return None
         except Exception as e:
             frappe.log_error(f"Error checking document status: {str(e)}", 
-                           f"PDF Generation - {doctype}")
-            return None
-        
-        """Generate PDF using working wkhtmltopdf"""
-        
-        try:
-            # Check if document is cancelled
-            doc = frappe.get_doc(doctype, docname)
-            if hasattr(doc, 'docstatus') and doc.docstatus == 2:
-                return None
-        except Exception as e:
-            frappe.log_error(f"Error checking document: {str(e)}", f"PDF - {doctype}")
+                        f"PDF Generation - {doctype}")
             return None
         
         try:
-            # Use the working method that was working before
-            html_content = frappe.get_print(doctype, docname, print_format=print_format or "Standard")
+            # Use the determined print format
+            html_content = frappe.get_print(doctype, docname, print_format=print_format)
             
             # Use minimal wkhtmltopdf options
             from frappe.utils.pdf import get_pdf
@@ -483,12 +495,11 @@ class PDFGenerator:
         except Exception as e:
             frappe.log_error(f"PDF generation failed: {str(e)}", f"PDF Error - {doctype}")
         
-        
-        # Try different PDF generation methods
+        # Try different PDF generation methods with the determined print format
         methods = [
-            PDFGenerator._try_weasyprint,
-            PDFGenerator._try_wkhtmltopdf_minimal,
-            PDFGenerator._try_frappe_default
+            lambda dt, dn, pf: PDFGenerator._try_wkhtmltopdf_minimal(dt, dn, pf),
+            lambda dt, dn, pf: PDFGenerator._try_weasyprint(dt, dn, pf),
+            lambda dt, dn, pf: PDFGenerator._try_frappe_default(dt, dn, pf)
         ]
         
         for method in methods:
@@ -498,18 +509,57 @@ class PDFGenerator:
                     return pdf_content
             except Exception as e:
                 frappe.log_error(f"PDF method failed: {str(e)}", 
-                               f"PDF Generation - {doctype}")
+                            f"PDF Generation - {doctype}")
                 continue
         
         frappe.log_error("All PDF generation methods failed", 
                         f"PDF Generation Failed - {doctype}")
         return None
     
+
+    @staticmethod
+    def _clean_html_for_pdf(html_content):
+        """Gently remove only print links without affecting styling"""
+        import re
+        
+        # Very specific patterns to remove only print links/buttons
+        patterns_to_remove = [
+            r'<a[^>]*href="[^"]*action=print[^"]*"[^>]*>.*?</a>',  # Specific print action links
+            r'<a[^>]*onclick="[^"]*print[^"]*"[^>]*>.*?</a>',     # Print onclick links
+            r'<button[^>]*onclick="[^"]*print[^"]*"[^>]*>.*?</button>',  # Print buttons
+        ]
+        
+        for pattern in patterns_to_remove:
+            html_content = re.sub(pattern, '', html_content, flags=re.IGNORECASE | re.DOTALL)
+        
+        # More targeted text removal - only remove standalone print/pdf links
+        html_content = re.sub(r'<a[^>]*>\s*Print\s*</a>', '', html_content, flags=re.IGNORECASE)
+        html_content = re.sub(r'<a[^>]*>\s*GET PDF\s*</a>', '', html_content, flags=re.IGNORECASE)
+        
+        # Add minimal CSS to hide specific print elements without affecting layout
+        css_hide_print = """
+        <style>
+        .no-print, .print-heading { display: none !important; }
+        </style>
+        """
+        
+        # Insert CSS after <head> tag
+        if '<head>' in html_content:
+            html_content = html_content.replace('<head>', f'<head>{css_hide_print}')
+        else:
+            html_content = f'{css_hide_print}{html_content}'
+        
+        return html_content
+
+    
     @staticmethod
     def _try_weasyprint(doctype, docname, print_format):
-        """Try WeasyPrint method"""
+        """Try WeasyPrint method without modifying HTML content"""
         default_format = PDFGenerator._get_default_print_format(doctype)
         html_content = frappe.get_print(doctype, docname, print_format=default_format)
+        
+        # Remove the HTML cleaning - use original content
+        # html_content = PDFGenerator._clean_html_for_pdf(html_content)
         
         with tempfile.NamedTemporaryFile(mode='w', suffix='.html', 
                                        delete=False, encoding='utf-8') as html_file:
@@ -536,7 +586,7 @@ class PDFGenerator:
                     os.unlink(pdf_file_path)
             except:
                 pass
-    
+
     @staticmethod
     def _try_wkhtmltopdf_minimal(doctype, docname, print_format):
         """Try wkhtmltopdf with minimal options"""
@@ -552,19 +602,55 @@ class PDFGenerator:
     @staticmethod
     def _try_frappe_default(doctype, docname, print_format):
         """Try Frappe's default PDF generation"""
-        pdf_content = frappe.get_print(doctype, docname, print_format="Standard", as_pdf=True)
+        # Use the passed print format or get default
+        if not print_format:
+            print_format = PDFGenerator._get_default_print_format(doctype)
+        
+        pdf_content = frappe.get_print(doctype, docname, print_format=print_format, as_pdf=True)
         frappe.log_error("PDF generated using Frappe default", f"PDF Success - {doctype}")
         return pdf_content
+
     
     @staticmethod
     def _get_default_print_format(doctype):
         """Get default print format for doctype"""
-        default_format = frappe.db.get_value("Property Setter", {
-            "doctype_or_field": "DocType",
-            "doc_type": doctype,
-            "property": "default_print_format"
-        }, "value")
-        return default_format or "Standard"
+        try:
+            # First, check if there's a default print format set in DocType
+            default_format = frappe.db.get_value("Property Setter", {
+                "doctype_or_field": "DocType",
+                "doc_type": doctype,
+                "property": "default_print_format"
+            }, "value")
+            
+            if default_format:
+                return default_format
+            
+            # Check if doctype has a default_print_format field
+            doctype_doc = frappe.get_doc("DocType", doctype)
+            if hasattr(doctype_doc, 'default_print_format') and doctype_doc.default_print_format:
+                return doctype_doc.default_print_format
+            
+            # Get the first print format for this doctype
+            print_formats = frappe.get_all("Print Format", 
+                                        filters={"doc_type": doctype}, 
+                                        fields=["name", "standard"],
+                                        order_by="standard desc, creation asc")
+            
+            if print_formats:
+                # Prefer standard print formats first
+                for pf in print_formats:
+                    if pf.standard == "Yes":
+                        return pf.name
+                # If no standard format, return the first one
+                return print_formats[0].name
+            
+            # Final fallback
+            return "Standard"
+            
+        except Exception as e:
+            frappe.log_error(f"Error getting default print format: {str(e)}", 
+                        f"Print Format Error - {doctype}")
+            return "Standard"
 
 
 def get_phone_number(doc, phone_field):
@@ -606,7 +692,10 @@ def get_phone_number(doc, phone_field):
 
 def send_scheduled_whatsapp_reminders():
     """Main function to send scheduled WhatsApp reminders"""
-    settings = frappe.get_single("WhatsApp Settings")
+    settings = safe_get_settings()
+    if not settings:
+        return
+
     if not settings.enabled:
         frappe.log_error("WhatsApp reminders skipped", "WhatsApp Settings disabled")
         return
@@ -746,7 +835,9 @@ def handle_whatsapp_notification_update(doc, method):
 def _handle_whatsapp_notification(doc, method, trigger_event):
     """Unified WhatsApp notification handler"""
     try:
-        settings = frappe.get_single("WhatsApp Settings")
+        settings = safe_get_settings()
+        if not settings:
+            return
         if not settings.enabled:
             return
 
@@ -903,12 +994,11 @@ def send_whatsapp_without_pdf(receiver_id, message, doctype, docname):
     return whatsapp_handler.send_message(receiver_id, text_message, doctype, 
                                        docname, pdf_content=None, fallback_to_text=True)
 
-
-# Backward compatibility functions
 def send_whatsapp_message_with_attachment(receiver_id, message, doctype, docname, 
-                                        print_format="Standard", fallback_to_text=False):
+                                        print_format=None, fallback_to_text=False):
     """Backward compatibility wrapper"""
     whatsapp_handler = WhatsAppHandler()
+    # If no print format specified, let PDFGenerator determine the default
     pdf_content = PDFGenerator.generate_pdf(doctype, docname, print_format)
     return whatsapp_handler.send_message(receiver_id, message, doctype, docname, 
                                        pdf_content, fallback_to_text)
