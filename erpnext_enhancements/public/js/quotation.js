@@ -1,6 +1,6 @@
 // Client Script for Quotation doctype
 // Add this as a Client Script in Frappe with DocType: "Quotation"
-
+// hi
 frappe.ui.form.on('Quotation', {
     refresh: function(frm) {
         applyCustomItemSearch(frm);
