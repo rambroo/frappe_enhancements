@@ -12,12 +12,13 @@ app_license = "mit"
 # }
 
 # required_apps = []
-
+# hi
 # Updated hooks.py
 doctype_js = {
     "Purchase Order": "public/js/purchase_order_review.js",
     "Sales Order": "public/js/sales_order.js",
-    "Payment Entry": "public/js/payment_entry_review.js"
+    "Payment Entry": "public/js/payment_entry_review.js",
+    "Quotation": "public/js/quotation.js"
 }
 
 jenv = {
