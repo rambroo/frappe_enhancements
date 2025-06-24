@@ -18,7 +18,6 @@ doctype_js = {
     "Purchase Order": "public/js/purchase_order_review.js",
     "Sales Order": "public/js/sales_order.js",
     "Payment Entry": "public/js/payment_entry_review.js",
-    "Quotation": "public/js/quotation.js"
 }
 
 jenv = {
@@ -30,7 +29,6 @@ jenv = {
 app_include_js = [
     "assets/erpnext_enhancements/js/sales_order.js"
 ]
-
 # jenv = {
 #     "jinja": ["erpnext_enhancements.templates.includes.po_review_modal_template"]
 # }
