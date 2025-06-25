@@ -12,7 +12,7 @@ def render_po_review_template(purchase_order, read_only=False):
         "date": po.transaction_date,
         "vendor": f"{po.supplier} ({po.supplier_name})" if po.supplier_name else po.supplier,
         "warehouse": po.set_warehouse or (po.items[0].warehouse if po.items else None),
-        # "custom_sales_person": po.custom_sales_person or "-",
+        "custom_sales_person": po.custom_sales_person or "-",
     }
 
     purchase_items = []
