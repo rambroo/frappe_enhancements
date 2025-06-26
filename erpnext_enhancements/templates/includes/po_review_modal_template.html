@@ -1,13 +1,159 @@
 <!-- File: apps/erpnext_enhancements/erpnext_enhancements/templates/includes/po_review_modal_template.html -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Purchase Order Review - Mobile Responsive</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .po-review {
+            padding: 15px;
+        }
+        
+        /* Mobile-first responsive tables */
+        @media (max-width: 768px) {
+            .table-responsive-mobile {
+                border: none;
+            }
+            
+            .table-responsive-mobile thead {
+                display: none;
+            }
+            
+            .table-responsive-mobile tbody tr {
+                display: block;
+                border: 1px solid #dee2e6;
+                margin-bottom: 15px;
+                border-radius: 8px;
+                padding: 10px;
+                background: #f8f9fa;
+            }
+            
+            .table-responsive-mobile tbody td {
+                display: block;
+                border: none;
+                padding: 5px 0;
+                text-align: left !important;
+            }
+            
+            .table-responsive-mobile tbody td:before {
+                content: attr(data-label) ": ";
+                font-weight: bold;
+                color: #495057;
+                display: inline-block;
+                min-width: 120px;
+            }
+            
+            .item-card {
+                border: 1px solid #dee2e6;
+                border-radius: 8px;
+                margin-bottom: 15px;
+                padding: 15px;
+                background: white;
+            }
+            
+            .item-header {
+                font-weight: bold;
+                color: #0d6efd;
+                margin-bottom: 10px;
+                font-size: 1.1em;
+            }
+            
+            .item-detail {
+                display: flex;
+                justify-content: space-between;
+                margin-bottom: 5px;
+                padding: 2px 0;
+            }
+            
+            .item-detail .label {
+                font-weight: 600;
+                color: #495057;
+                min-width: 120px;
+            }
+            
+            .item-detail .value {
+                text-align: right;
+                color: #212529;
+            }
+            
+            .sales-order-card {
+                border-left: 4px solid #0d6efd;
+                background: #f8f9fa;
+                padding: 15px;
+                margin-bottom: 15px;
+                border-radius: 0 8px 8px 0;
+            }
+        }
+        
+        /* Desktop styles */
+        @media (min-width: 769px) {
+            .mobile-only {
+                display: none;
+            }
+        }
+        
+        /* Mobile styles */
+        @media (max-width: 768px) {
+            .desktop-only {
+                display: none;
+            }
+            
+            h3 {
+                font-size: 1.5rem;
+            }
+            
+            h4 {
+                font-size: 1.25rem;
+                margin-top: 25px;
+                margin-bottom: 15px;
+            }
+        }
+        
+        .summary-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        .summary-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .summary-item:last-child {
+            border-bottom: none;
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+        
+        .badge-custom {
+            background: #28a745;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+        }
+    </style>
+</head>
 <div class="po-review">
     <h3>Purchase Order Review Summary</h3>
 
+    <!-- Modify the Purchase Order Details table: -->
     <h4>Purchase Order Details</h4>
     <table class="table table-bordered">
         <tr><th>PO ID</th><td>{{ header.po_id }}</td></tr>
         <tr><th>Date</th><td>{{ header.date }}</td></tr>
         <tr><th>Vendor</th><td>{{ header.vendor }}</td></tr>
         <tr><th>Warehouse</th><td>{{ header.warehouse }}</td></tr>
+        <tr><th>Sales Person</th><td>{{ header.custom_sales_person }}</td></tr>
     </table>
 
     <h4>Purchase Items</h4>
