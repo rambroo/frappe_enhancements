@@ -101,7 +101,7 @@ def render_po_review_template(purchase_order, read_only=False):
 
         sales_details.append({
             "order_id": so.name,
-            "customer": so.customer,
+            "customer": so.customer_name,
             "salesman": salesperson,
             "influencer": so.sales_partner,
             "commission_value": commission_rate,

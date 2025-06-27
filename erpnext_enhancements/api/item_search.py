@@ -6,15 +6,18 @@ import time
 @frappe.whitelist()
 def custom_item_search(doctype, txt, searchfield, start, page_len, filters):
     """
-    Optimized search function for Item lookup that searches only in item_name field
-    Priority order: exact item_name match > partial item_name match
-    This version is significantly faster for large datasets (23k+ items)
+    Enhanced search function for Item lookup that searches in both item_code and item_name fields
+    Priority order: 
+    1. Exact item_code match (highest priority)
+    2. Exact item_name match 
+    3. Partial item_name match (lowest priority)
+    This version maintains performance for large datasets (23k+ items)
     """
-    # Clean and split the search text into individual words
-    terms = txt.strip().split() if txt and txt.strip() else []
+    # Clean the search text
+    search_text = txt.strip() if txt and txt.strip() else ""
     
     # If no search terms, return standard query
-    if not terms:
+    if not search_text:
         return frappe.db.sql("""
             SELECT DISTINCT item.name, item.item_name, COALESCE(item.custom_sku_code, '') as custom_sku_code
             FROM `tabItem` item
@@ -23,35 +26,48 @@ def custom_item_search(doctype, txt, searchfield, start, page_len, filters):
             LIMIT %s, %s
         """, (start, page_len))
 
-    # Construct the SQL query with AND conditions for each term
-    # Each term must match the item_name field
-    conditions = []
-    params = []
+    # Split search text into terms for item_name partial matching
+    terms = search_text.split()
+    
+    # Construct conditions for partial item_name matching (all terms must match)
+    name_conditions = []
+    name_params = []
     
     for term in terms:
-        conditions.append("item.item_name LIKE %s")
-        params.append(f'%{term}%')
+        name_conditions.append("item.item_name LIKE %s")
+        name_params.append(f'%{term}%')
     
-    where_clause = " AND ".join(conditions)
+    name_where_clause = " AND ".join(name_conditions) if name_conditions else "1=1"
     
-    # Simple query focusing only on item_name
+    # Enhanced query with priority-based ordering
     query = f"""
         SELECT DISTINCT item.name, item.item_name, COALESCE(item.custom_sku_code, '') as custom_sku_code
         FROM `tabItem` item
-        WHERE item.disabled = 0 AND ({where_clause})
+        WHERE item.disabled = 0 
+        AND (
+            item.item_code = %s                    -- Exact item_code match
+            OR item.item_name = %s                 -- Exact item_name match
+            OR ({name_where_clause})               -- Partial item_name match
+        )
         ORDER BY 
             CASE 
-                WHEN item.item_name = %s THEN 1  -- Exact match gets highest priority
-                ELSE 2                           -- Partial matches
+                WHEN item.item_code = %s THEN 1    -- Exact item_code match (highest priority)
+                WHEN item.item_name = %s THEN 2    -- Exact item_name match
+                ELSE 3                             -- Partial item_name matches (lowest priority)
             END,
-            LENGTH(item.item_name),              -- Shorter names first within same priority
-            item.item_name                       -- Alphabetical within same length
+            LENGTH(item.item_name),                -- Shorter names first within same priority
+            item.item_name                         -- Alphabetical within same length
         LIMIT %s, %s
     """
    
-    # Prepare parameters: search params + exact match param + pagination params
-    full_search_text = ' '.join(terms)  # For exact match comparison
-    query_params = params + [full_search_text, start, page_len]
+    # Prepare parameters: 
+    # exact_code + exact_name + partial_name_params + exact_code_again + exact_name_again + pagination
+    query_params = (
+        [search_text, search_text] +           # For WHERE clause (exact matches)
+        name_params +                          # For partial name matching
+        [search_text, search_text] +           # For ORDER BY clause (exact matches)
+        [start, page_len]                      # For pagination
+    )
     
     results = frappe.db.sql(query, query_params)
     
@@ -71,10 +87,10 @@ def debounced_item_search(doctype, txt, searchfield, start, page_len, filters):
     end_time = time.time()
     search_duration = end_time - start_time
     
-    # Log if search takes longer than 50ms (lowered threshold since this should be much faster)
+    # Log if search takes longer than 50ms
     if search_duration > 0.05:
         frappe.log_error(
-            f"Item search took {search_duration:.3f}s for query '{txt}' - Consider adding database index on item_name",
+            f"Item search took {search_duration:.3f}s for query '{txt}' - Results include item_code exact match and item_name exact/partial match",
             "Item Search Performance"
         )
     
