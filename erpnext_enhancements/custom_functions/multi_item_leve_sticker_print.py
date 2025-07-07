@@ -1,16 +1,13 @@
 import frappe
 import base64
 from frappe.utils.pdf import get_pdf
-from frappe.utils import get_site_path
-import os
-import qrcode
-from io import BytesIO
 import math
 
 @frappe.whitelist()
 def download_multiple_item_stickers(item_codes):
     """
     Generate PDF with multiple QR codes arranged in fixed layout (10 items per page)
+    Uses existing custom_qr_image field from Item doctype
     """
     try:
         if isinstance(item_codes, str):
@@ -25,11 +22,7 @@ def download_multiple_item_stickers(item_codes):
         for item_code in item_codes:
             item_doc = frappe.get_doc("Item", item_code)
             
-            # Generate QR code if not exists
-            if not item_doc.custom_qr_image:
-                generate_qr_code_for_item(item_doc)
-                item_doc.reload()
-            
+            # Check if QR image exists
             if item_doc.custom_qr_image:
                 # Get item price from Item Price doctype
                 item_price = get_item_price(item_code)
@@ -42,7 +35,7 @@ def download_multiple_item_stickers(item_codes):
                 })
         
         if not item_data:
-            frappe.throw("No QR codes found for the selected items")
+            frappe.throw("No QR codes found for the selected items. Please ensure the custom_qr_image field is populated.")
         
         # Generate HTML with QR codes in fixed layout
         html_content = generate_fixed_layout_html(item_data, items_per_page)
@@ -228,73 +221,32 @@ def generate_fixed_layout_html(item_data, items_per_page=10):
     
     return html
 
-def generate_qr_code_for_item(item_doc):
-    """
-    Generate QR code for an item and save it
-    """
-    try:
-        # Create QR code data (you can customize this)
-        qr_data = f"Item: {item_doc.name}\nName: {item_doc.item_name}"
-        if item_doc.brand:
-            qr_data += f"\nBrand: {item_doc.brand}"
-        
-        # Generate QR code
-        qr = qrcode.QRCode(
-            version=1,
-            error_correction=qrcode.constants.ERROR_CORRECT_L,
-            box_size=10,
-            border=4,
-        )
-        qr.add_data(qr_data)
-        qr.make(fit=True)
-        
-        # Create QR code image
-        qr_img = qr.make_image(fill_color="black", back_color="white")
-        
-        # Save to BytesIO
-        img_buffer = BytesIO()
-        qr_img.save(img_buffer, format='PNG')
-        img_buffer.seek(0)
-        
-        # Create file in Frappe
-        file_doc = frappe.get_doc({
-            "doctype": "File",
-            "file_name": f"qr_code_{item_doc.name}.png",
-            "content": base64.b64encode(img_buffer.getvalue()).decode(),
-            "decode": True,
-            "is_private": 0,
-            "attached_to_doctype": "Item",
-            "attached_to_name": item_doc.name
-        })
-        file_doc.insert()
-        
-        # Update item with QR code URL
-        item_doc.custom_qr_image = file_doc.file_url
-        item_doc.save()
-        
-        return file_doc.file_url
-        
-    except Exception as e:
-        frappe.log_error(f"Error generating QR code for {item_doc.name}: {str(e)}")
-        return None
-
 @frappe.whitelist()
-def generate_qr_codes_bulk(item_codes):
+def check_items_with_qr_codes(item_codes):
     """
-    Generate QR codes for multiple items in bulk
+    Check which items have QR codes attached
     """
     if isinstance(item_codes, str):
         import json
         item_codes = json.loads(item_codes)
     
-    success_count = 0
+    items_with_qr = []
+    items_without_qr = []
+    
     for item_code in item_codes:
         try:
             item_doc = frappe.get_doc("Item", item_code)
-            if not item_doc.custom_qr_image:
-                generate_qr_code_for_item(item_doc)
-                success_count += 1
+            if item_doc.custom_qr_image:
+                items_with_qr.append(item_code)
+            else:
+                items_without_qr.append(item_code)
         except Exception as e:
-            frappe.log_error(f"Error processing {item_code}: {str(e)}")
+            frappe.log_error(f"Error checking {item_code}: {str(e)}")
+            items_without_qr.append(item_code)
     
-    return {"success_count": success_count, "total": len(item_codes)}
+    return {
+        "items_with_qr": items_with_qr,
+        "items_without_qr": items_without_qr,
+        "total_with_qr": len(items_with_qr),
+        "total_without_qr": len(items_without_qr)
+    }
