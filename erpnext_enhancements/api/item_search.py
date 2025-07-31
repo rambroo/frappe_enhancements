@@ -1,5 +1,6 @@
 import frappe
 import time
+import re
 
 @frappe.whitelist()
 def custom_item_search(doctype, txt, searchfield, start, page_len, filters):
@@ -8,10 +9,11 @@ def custom_item_search(doctype, txt, searchfield, start, page_len, filters):
     Priority order: 
     1. Exact custom_sku_code match (highest priority)
     2. Exact item_code match
-    3. Exact item_name match 
-    4. Partial item_code match
-    5. Partial item_name match
-    6. Partial custom_sku_code match (lowest priority)
+    3. Exact item_name match
+    4. Word boundary match in custom_sku_code (NEW - higher priority for complete words)
+    5. Partial item_code match
+    6. Partial item_name match
+    7. Partial custom_sku_code match (lowest priority)
     This version maintains performance for large datasets (23k+ items)
     """
     # Clean the search text
@@ -60,7 +62,21 @@ def custom_item_search(doctype, txt, searchfield, start, page_len, filters):
     
     sku_where_clause = " AND ".join(sku_conditions) if sku_conditions else "1=1"
     
-    # Enhanced query with your specified priority ordering
+    # NEW: Word boundary conditions for custom_sku_code
+    # This uses REGEXP to match complete words separated by spaces, hyphens, or other delimiters
+    word_boundary_conditions = []
+    word_boundary_params = []
+    
+    for term in terms:
+        # MySQL REGEXP pattern for word boundaries
+        # [[:<:]] and [[:>:]] are MySQL word boundary markers
+        # Alternative: (^|[^a-zA-Z0-9]) + term + ([^a-zA-Z0-9]|$)
+        word_boundary_conditions.append("item.custom_sku_code REGEXP %s")
+        word_boundary_params.append(f'(^|[^a-zA-Z0-9]){re.escape(term)}([^a-zA-Z0-9]|$)')
+    
+    word_boundary_where_clause = " AND ".join(word_boundary_conditions) if word_boundary_conditions else "1=1"
+    
+    # Enhanced query with word boundary priority
     query = f"""
         SELECT DISTINCT item.name, item.item_name, COALESCE(item.custom_sku_code, '') as custom_sku_code
         FROM `tabItem` item
@@ -69,19 +85,21 @@ def custom_item_search(doctype, txt, searchfield, start, page_len, filters):
             item.custom_sku_code = %s              -- 1. Exact custom_sku_code match
             OR item.item_code = %s                 -- 2. Exact item_code match
             OR item.item_name = %s                 -- 3. Exact item_name match
-            OR ({code_where_clause})               -- 4. Partial item_code match
-            OR ({name_where_clause})               -- 5. Partial item_name match
-            OR (item.custom_sku_code IS NOT NULL AND {sku_where_clause})  -- 6. Partial custom_sku_code match
+            OR (item.custom_sku_code IS NOT NULL AND {word_boundary_where_clause})  -- 4. Word boundary match in SKU
+            OR ({code_where_clause})               -- 5. Partial item_code match
+            OR ({name_where_clause})               -- 6. Partial item_name match
+            OR (item.custom_sku_code IS NOT NULL AND {sku_where_clause})  -- 7. Partial custom_sku_code match
         )
         ORDER BY 
             CASE 
                 WHEN item.custom_sku_code = %s THEN 1      -- 1. Exact custom_sku_code (highest priority)
                 WHEN item.item_code = %s THEN 2            -- 2. Exact item_code
                 WHEN item.item_name = %s THEN 3            -- 3. Exact item_name
-                WHEN ({code_where_clause}) THEN 4          -- 4. Partial item_code
-                WHEN ({name_where_clause}) THEN 5          -- 5. Partial item_name
-                WHEN item.custom_sku_code IS NOT NULL AND ({sku_where_clause}) THEN 6  -- 6. Partial custom_sku_code (lowest priority)
-                ELSE 7
+                WHEN item.custom_sku_code IS NOT NULL AND ({word_boundary_where_clause}) THEN 4  -- 4. Word boundary in SKU
+                WHEN ({code_where_clause}) THEN 5          -- 5. Partial item_code
+                WHEN ({name_where_clause}) THEN 6          -- 6. Partial item_name
+                WHEN item.custom_sku_code IS NOT NULL AND ({sku_where_clause}) THEN 7  -- 7. Partial custom_sku_code (lowest priority)
+                ELSE 8
             END,
             LENGTH(COALESCE(item.item_name, '')),          -- Shorter names first within same priority
             item.item_name                                 -- Alphabetical within same length
@@ -89,15 +107,14 @@ def custom_item_search(doctype, txt, searchfield, start, page_len, filters):
     """
    
     # Prepare parameters in the correct order:
-    # WHERE clause: exact_sku + exact_code + exact_name + partial_code_params + partial_name_params + partial_sku_params
-    # ORDER BY clause: exact_sku + exact_code + exact_name + partial_code_params + partial_name_params + partial_sku_params
-    # LIMIT clause: start + page_len
     query_params = (
         [search_text, search_text, search_text] +  # WHERE clause exact matches
+        word_boundary_params +                     # WHERE word boundary matching
         code_params +                              # WHERE partial code matching
         name_params +                              # WHERE partial name matching  
         sku_params +                               # WHERE partial SKU matching
         [search_text, search_text, search_text] +  # ORDER BY exact matches
+        word_boundary_params +                     # ORDER BY word boundary matching
         code_params +                              # ORDER BY partial code matching
         name_params +                              # ORDER BY partial name matching
         sku_params +                               # ORDER BY partial SKU matching
@@ -108,7 +125,7 @@ def custom_item_search(doctype, txt, searchfield, start, page_len, filters):
     
     return results
 
-    
+
 @frappe.whitelist()
 def debounced_item_search(doctype, txt, searchfield, start, page_len, filters):
     """
