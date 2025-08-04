@@ -3,7 +3,7 @@ import time
 import re
 
 @frappe.whitelist()
-def custom_item_search(doctype, txt, searchfield, start, page_len, filters):
+def custom_item_search(doctype, txt, searchfield, start, page_len, filters, fields=None):
     """
     Enhanced search function for Item lookup with priority-based search
     Priority order: 
@@ -19,15 +19,68 @@ def custom_item_search(doctype, txt, searchfield, start, page_len, filters):
     # Clean the search text
     search_text = txt.strip() if txt and txt.strip() else ""
     
+    # Handle fields parameter - parse if it's a string, use as-is if it's a list
+    if fields:
+        if isinstance(fields, str):
+            # Parse the fields string (usually JSON array or comma-separated)
+            try:
+                import json
+                field_list = json.loads(fields)
+            except:
+                # Fallback to comma-separated parsing
+                field_list = [f.strip() for f in fields.split(',')]
+        elif isinstance(fields, list):
+            field_list = fields
+        else:
+            field_list = ['name', 'item_name', 'custom_sku_code']
+    else:
+        field_list = ['name', 'item_name', 'custom_sku_code']
+    
+    # Ensure essential fields are always included
+    essential_fields = ['name', 'item_name', 'custom_sku_code']
+    for field in essential_fields:
+        if field not in field_list:
+            field_list.append(field)
+    
+    # Build the SELECT clause dynamically
+    select_fields = []
+    for field in field_list:
+        if field == 'custom_sku_code':
+            select_fields.append("COALESCE(item.custom_sku_code, '') as custom_sku_code")
+        elif field == 'name':
+            # Handle 'name' field specifically - it refers to item_code in Item doctype
+            select_fields.append("item.name")
+        elif field in ['item_name', 'item_code', 'brand', 'standard_rate', 'image', 'max_discount', 'stock_uom']:
+            select_fields.append(f"item.{field}")
+        else:
+            # Handle any other fields that might be requested - but validate they exist
+            # Add validation to prevent SQL injection and invalid fields
+            valid_item_fields = [
+                'name', 'item_name', 'item_code', 'custom_sku_code', 'brand', 
+                'standard_rate', 'image', 'max_discount', 'stock_uom', 'description',
+                'item_group', 'disabled', 'has_variants', 'variant_of', 'creation',
+                'modified', 'owner', 'modified_by'
+            ]
+            if field in valid_item_fields:
+                select_fields.append(f"item.{field}")
+            else:
+                # Skip invalid fields to prevent SQL errors
+                frappe.log_error(f"Invalid field '{field}' requested in item search", "Item Search Warning")
+                continue
+    
+    select_clause = "SELECT DISTINCT " + ", ".join(select_fields)
+    
     # If no search terms, return standard query
     if not search_text:
-        return frappe.db.sql("""
-            SELECT DISTINCT item.name, item.item_name, COALESCE(item.custom_sku_code, '') as custom_sku_code
+        query = f"""
+            {select_clause}
             FROM `tabItem` item
             WHERE item.disabled = 0
             ORDER BY item.item_name
             LIMIT %s, %s
-        """, (start, page_len))
+        """
+        results = frappe.db.sql(query, (start, page_len), as_dict=True)
+        return {"data": results}
 
     # Split search text into terms for partial matching
     terms = search_text.split()
@@ -78,7 +131,7 @@ def custom_item_search(doctype, txt, searchfield, start, page_len, filters):
     
     # Enhanced query with word boundary priority
     query = f"""
-        SELECT DISTINCT item.name, item.item_name, COALESCE(item.custom_sku_code, '') as custom_sku_code
+        {select_clause}
         FROM `tabItem` item
         WHERE item.disabled = 0 
         AND (
@@ -121,15 +174,16 @@ def custom_item_search(doctype, txt, searchfield, start, page_len, filters):
         [start, page_len]                          # Pagination
     )
     
-    results = frappe.db.sql(query, query_params)
+    results = frappe.db.sql(query, query_params, as_dict=True)
     
-    return results
+    # Return in the expected format
+    return {"data": results}
 
 
 @frappe.whitelist()
-def debounced_item_search(doctype, txt, searchfield, start, page_len, filters):
+def debounced_item_search(doctype, txt, searchfield, start, page_len, filters, fields=None):
     """
     Debounced version of custom_item_search - optimized for performance
     """
     # Call the main search function directly without logging
-    return custom_item_search(doctype, txt, searchfield, start, page_len, filters)
+    return custom_item_search(doctype, txt, searchfield, start, page_len, filters, fields)
