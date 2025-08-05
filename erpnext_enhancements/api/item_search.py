@@ -1,7 +1,6 @@
 import frappe
 import time
 import re
-
 from functools import lru_cache
 from typing import List, Dict, Any, Optional, Union
 
@@ -264,106 +263,82 @@ def backend_item_search(doctype, txt, searchfield, start, page_len, filters, fie
     Backend/Custom App search function for Item lookup (BACKEND VERSION)
     Returns: List of dictionaries for custom applications
     
-=======
-
-@frappe.whitelist()
-def custom_item_search(doctype, txt, searchfield, start, page_len, filters):
-    """
-    Enhanced search function for Item lookup with priority-based search
-
     Priority order: 
     1. Exact custom_sku_code match (highest priority)
     2. Exact item_code match
     3. Exact item_name match
-    4. Word boundary match in custom_sku_code (NEW - higher priority for complete words)
+    4. Word boundary match in custom_sku_code (complete words)
     5. Partial item_code match
     6. Partial item_name match
     7. Partial custom_sku_code match (lowest priority)
-    This version maintains performance for large datasets (23k+ items)
-    """
-    # Clean the search text
-    search_text = txt.strip() if txt and txt.strip() else ""
     
-    # If no search terms, return standard query
+    Optimizations:
+    - Reduced code duplication
+    - Better parameter handling
+    - Field validation with caching
+    - More efficient query construction
+    - Improved error handling
+    """
+    
+    # Input validation and sanitization
+    search_text = txt.strip() if txt and txt.strip() else ""
+    start = max(0, int(start or 0))
+    page_len = min(50, max(1, int(page_len or 20)))  # Limit page size for performance
+    
+    # Parse and validate fields
+    field_list = parse_fields(fields)
+    select_clause = build_select_clause(field_list)
+    
+    # Handle empty search - return basic results
     if not search_text:
-        return frappe.db.sql("""
-            SELECT DISTINCT item.name, item.item_name, COALESCE(item.custom_sku_code, '') as custom_sku_code
+        query = f"""
+            {select_clause}
             FROM `tabItem` item
             WHERE item.disabled = 0
             ORDER BY item.item_name
             LIMIT %s, %s
-        """, (start, page_len))
-
-    # Split search text into terms for partial matching
-    terms = search_text.split()
+        """
+        try:
+            results = frappe.db.sql(query, (start, page_len), as_dict=True)
+            return results  # Return clean results without additional formatting
+        except Exception as e:
+            frappe.log_error(f"Database error in item search: {str(e)}", "Item Search Error")
+            return []
     
-    # Construct conditions for partial item_name matching (all terms must match)
-    name_conditions = []
-    name_params = []
+    # Optimize search terms
+    terms = [term.strip() for term in search_text.split() if term.strip()]
+    if not terms:
+        return []
     
-    for term in terms:
-        name_conditions.append("item.item_name LIKE %s")
-        name_params.append(f'%{term}%')
+    # Limit number of search terms to prevent performance issues
+    terms = terms[:5]  # Limit to 5 terms maximum
     
-    name_where_clause = " AND ".join(name_conditions) if name_conditions else "1=1"
+    # Build search conditions
+    conditions = build_search_conditions(terms)
     
-    # Construct conditions for partial item_code matching (all terms must match)
-    code_conditions = []
-    code_params = []
-    
-    for term in terms:
-        code_conditions.append("item.item_code LIKE %s")
-        code_params.append(f'%{term}%')
-    
-    code_where_clause = " AND ".join(code_conditions) if code_conditions else "1=1"
-    
-    # Construct conditions for partial custom_sku_code matching (all terms must match)
-    sku_conditions = []
-    sku_params = []
-    
-    for term in terms:
-        sku_conditions.append("item.custom_sku_code LIKE %s")
-        sku_params.append(f'%{term}%')
-    
-    sku_where_clause = " AND ".join(sku_conditions) if sku_conditions else "1=1"
-    
-    # NEW: Word boundary conditions for custom_sku_code
-    # This uses REGEXP to match complete words separated by spaces, hyphens, or other delimiters
-    word_boundary_conditions = []
-    word_boundary_params = []
-    
-    for term in terms:
-        # MySQL REGEXP pattern for word boundaries
-        # [[:<:]] and [[:>:]] are MySQL word boundary markers
-        # Alternative: (^|[^a-zA-Z0-9]) + term + ([^a-zA-Z0-9]|$)
-        word_boundary_conditions.append("item.custom_sku_code REGEXP %s")
-        word_boundary_params.append(f'(^|[^a-zA-Z0-9]){re.escape(term)}([^a-zA-Z0-9]|$)')
-    
-    word_boundary_where_clause = " AND ".join(word_boundary_conditions) if word_boundary_conditions else "1=1"
-    
-    # Enhanced query with word boundary priority
+    # Construct optimized query with proper indexing hints
     query = f"""
-        SELECT DISTINCT item.name, item.item_name, COALESCE(item.custom_sku_code, '') as custom_sku_code
-        FROM `tabItem` item
+        {select_clause}
+        FROM `tabItem` item USE INDEX (PRIMARY, modified)
         WHERE item.disabled = 0 
         AND (
             item.custom_sku_code = %s              -- 1. Exact custom_sku_code match
-            OR item.item_code = %s                 -- 2. Exact item_code match
+            OR item.item_code = %s                 -- 2. Exact item_code match  
             OR item.item_name = %s                 -- 3. Exact item_name match
-            OR (item.custom_sku_code IS NOT NULL AND {word_boundary_where_clause})  -- 4. Word boundary match in SKU
-            OR ({code_where_clause})               -- 5. Partial item_code match
-            OR ({name_where_clause})               -- 6. Partial item_name match
-            OR (item.custom_sku_code IS NOT NULL AND {sku_where_clause})  -- 7. Partial custom_sku_code match
+            OR (item.custom_sku_code IS NOT NULL AND item.custom_sku_code != '' AND {conditions['word_boundary_where']})  -- 4. Word boundary match in SKU
+            OR ({conditions['code_where']})        -- 5. Partial item_code match
+            OR ({conditions['name_where']})        -- 6. Partial item_name match
+            OR (item.custom_sku_code IS NOT NULL AND item.custom_sku_code != '' AND {conditions['sku_where']})  -- 7. Partial custom_sku_code match
         )
         ORDER BY 
             CASE 
                 WHEN item.custom_sku_code = %s THEN 1      -- 1. Exact custom_sku_code (highest priority)
                 WHEN item.item_code = %s THEN 2            -- 2. Exact item_code
                 WHEN item.item_name = %s THEN 3            -- 3. Exact item_name
-                WHEN item.custom_sku_code IS NOT NULL AND ({word_boundary_where_clause}) THEN 4  -- 4. Word boundary in SKU
-                WHEN ({code_where_clause}) THEN 5          -- 5. Partial item_code
-                WHEN ({name_where_clause}) THEN 6          -- 6. Partial item_name
-                WHEN item.custom_sku_code IS NOT NULL AND ({sku_where_clause}) THEN 7  -- 7. Partial custom_sku_code (lowest priority)
+                WHEN item.custom_sku_code IS NOT NULL AND item.custom_sku_code != '' AND ({conditions['word_boundary_where']}) THEN 4  -- 4. Word boundary in SKU
+                WHEN ({conditions['code_where']}) THEN 5   -- 5. Partial item_code
+                WHEN ({conditions['name_where']}) THEN 6   -- 6. Partial item_name
+                WHEN item.custom_sku_code IS NOT NULL AND item.custom_sku_code != '' AND ({conditions['sku_where']}) THEN 7  -- 7. Partial custom_sku_code
                 ELSE 8
             END,
             LENGTH(COALESCE(item.item_name, '')),          -- Shorter names first within same priority
@@ -371,22 +346,25 @@ def custom_item_search(doctype, txt, searchfield, start, page_len, filters):
         LIMIT %s, %s
     """
    
-    # Prepare parameters in the correct order:
+    # Prepare parameters efficiently
+    exact_params = [search_text, search_text, search_text]
+    order_params = [search_text, search_text, search_text]
+    pagination_params = [start, page_len]
+    
     query_params = (
-        [search_text, search_text, search_text] +  # WHERE clause exact matches
-        word_boundary_params +                     # WHERE word boundary matching
-        code_params +                              # WHERE partial code matching
-        name_params +                              # WHERE partial name matching  
-        sku_params +                               # WHERE partial SKU matching
-        [search_text, search_text, search_text] +  # ORDER BY exact matches
-        word_boundary_params +                     # ORDER BY word boundary matching
-        code_params +                              # ORDER BY partial code matching
-        name_params +                              # ORDER BY partial name matching
-        sku_params +                               # ORDER BY partial SKU matching
-        [start, page_len]                          # Pagination
+        exact_params +                                      # WHERE clause exact matches
+        conditions['word_boundary_params'] +                # WHERE word boundary matching
+        conditions['code_params'] +                         # WHERE partial code matching
+        conditions['name_params'] +                         # WHERE partial name matching  
+        conditions['sku_params'] +                          # WHERE partial SKU matching
+        order_params +                                      # ORDER BY exact matches
+        conditions['word_boundary_params'] +                # ORDER BY word boundary matching
+        conditions['code_params'] +                         # ORDER BY partial code matching
+        conditions['name_params'] +                         # ORDER BY partial name matching
+        conditions['sku_params'] +                          # ORDER BY partial SKU matching
+        pagination_params                                   # Pagination
     )
     
-
     try:
         results = frappe.db.sql(query, query_params, as_dict=True)
         return results  # Return clean results without additional formatting
@@ -418,16 +396,42 @@ def backend_debounced_item_search(doctype, txt, searchfield, start, page_len, fi
 # ================================
 # UTILITY FUNCTIONS
 # ================================
-=======
-    results = frappe.db.sql(query, query_params)
-    
-    return results
-
-
+#hi
 @frappe.whitelist()
-def debounced_item_search(doctype, txt, searchfield, start, page_len, filters):
-    """
-    Debounced version of custom_item_search - optimized for performance
-    """
-    # Call the main search function directly without logging
-    return custom_item_search(doctype, txt, searchfield, start, page_len, filters)
+def get_search_stats():
+    """Get search performance statistics for monitoring"""
+    try:
+        stats = frappe.db.sql("""
+            SELECT 
+                COUNT(*) as total_items,
+                COUNT(CASE WHEN custom_sku_code IS NOT NULL AND custom_sku_code != '' THEN 1 END) as items_with_sku,
+                COUNT(CASE WHEN disabled = 0 THEN 1 END) as active_items
+            FROM `tabItem`
+        """, as_dict=True)[0]
+        
+        return stats
+    except Exception as e:
+        frappe.log_error(f"Error getting search stats: {str(e)}", "Search Stats Error")
+        return {"error": "Unable to fetch statistics"}
+
+@frappe.whitelist()  
+def validate_search_indexes():
+    """Validate that proper indexes exist for optimal search performance"""
+    try:
+        indexes = frappe.db.sql("""
+            SHOW INDEX FROM `tabItem` 
+            WHERE Column_name IN ('item_name', 'item_code', 'custom_sku_code', 'disabled')
+        """, as_dict=True)
+        
+        return {
+            "indexes_found": len(indexes),
+            "indexes": indexes,
+            "recommendations": [
+                "Ensure index on (disabled, item_name) for default queries",
+                "Consider index on (disabled, custom_sku_code) for SKU searches",
+                "Monitor query performance with EXPLAIN"
+            ]
+        }
+    except Exception as e:
+        frappe.log_error(f"Error validating indexes: {str(e)}", "Index Validation Error")
+        return {"error": "Unable to validate indexes"}
