@@ -42,7 +42,6 @@ def render_po_review_template(purchase_order, read_only=False):
         if not selling_price:
             selling_price = item_doc.get("standard_rate") or 0
 
-        
         purchase_items.append({
             "item_name": item.item_name,
             "sku_code": item.item_code,
@@ -52,7 +51,6 @@ def render_po_review_template(purchase_order, read_only=False):
             "purchase_price_incl_tax": item.amount,
             "purchase_price": purchase_price,  # New field
             "selling_price": selling_price,    # New field
-            "selling_total": selling_price * item.qty,  # NEW: selling price * qty
             "discount": item.discount_percentage or 0,
             "warehouse": item.warehouse,
             "physical_stock": stock_qty,
