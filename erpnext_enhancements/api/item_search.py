@@ -396,7 +396,7 @@ def backend_debounced_item_search(doctype, txt, searchfield, start, page_len, fi
 # ================================
 # UTILITY FUNCTIONS
 # ================================
-
+#hi
 @frappe.whitelist()
 def get_search_stats():
     """Get search performance statistics for monitoring"""
