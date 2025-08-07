@@ -179,14 +179,19 @@ class WhatsAppHandler:
 class MessageTemplateHandler:
     """Handles message template processing and placeholder replacement"""
     
+    # Modification 1: Enhanced clean_html method in MessageTemplateHandler class
     @staticmethod
     def clean_html(text):
-        """Remove HTML tags and entities from text"""
+        """Remove HTML tags and entities from text - Enhanced for Quill editor content"""
         if not text:
             return text
         
         try:
-            # Remove HTML tags
+            # Remove Quill editor specific divs first
+            text = re.sub(r'<div class="ql-editor[^"]*"[^>]*>', '', text)
+            text = re.sub(r'</div>', '', text)
+            
+            # Remove all HTML tags
             text = re.sub(r'<[^>]+>', '', text)
             
             # Replace common HTML entities
@@ -196,19 +201,26 @@ class MessageTemplateHandler:
                 '&lt;': '<',
                 '&gt;': '>',
                 '&quot;': '"',
-                '&#39;': "'"
+                '&#39;': "'",
+                '&apos;': "'",
+                '&hellip;': '...',
+                '&mdash;': '—',
+                '&ndash;': '–'
             }
             
             for entity, replacement in html_entities.items():
                 text = text.replace(entity, replacement)
             
-            # Clean up whitespace
+            # Clean up whitespace and newlines
             text = re.sub(r'\s+', ' ', text).strip()
+            text = re.sub(r'\n\s*\n', '\n', text)  # Remove empty lines
+            
             return text
             
         except Exception as e:
             frappe.log_error(f"Error cleaning HTML: {str(e)}", "WhatsApp HTML Cleanup")
             return text
+
     
     @staticmethod
     def build_message(doc, doctype_setting, is_reminder=False, target_date=None, trigger_event=None):
@@ -303,9 +315,10 @@ class MessageTemplateHandler:
 
 
     
+    # Modification 2: Add HTML cleaning to _process_template method
     @staticmethod
     def _process_template(template_text, doc, target_date=None):
-        """Process template with placeholder replacement"""
+        """Process template with placeholder replacement - Enhanced with HTML cleaning"""
         template_text = MessageTemplateHandler.clean_html(template_text)
         
         # Build placeholders dictionary
@@ -316,12 +329,16 @@ class MessageTemplateHandler:
         for placeholder, value in placeholders.items():
             message = message.replace(placeholder, str(value))
         
-        # Handle dynamic field placeholders
+        # Handle dynamic field placeholders with HTML cleaning
         remaining_patterns = re.findall(r'\{([^}]+)\}', message)
         for pattern in remaining_patterns:
             if hasattr(doc, pattern):
                 value = getattr(doc, pattern)
                 if value:
+                    # Clean HTML if it's a string value
+                    if isinstance(value, str):
+                        value = MessageTemplateHandler.clean_html(value)
+                    
                     # Format dates
                     if hasattr(value, 'strftime'):
                         try:
@@ -334,9 +351,10 @@ class MessageTemplateHandler:
         
         return message
     
+    # Modification 3: Enhanced _build_placeholders method to clean HTML in common fields
     @staticmethod
     def _build_placeholders(doc, target_date=None):
-        """Build common placeholders dictionary"""
+        """Build common placeholders dictionary - Enhanced with HTML cleaning"""
         placeholders = {
             '{doctype}': doc.doctype,
             '{name}': doc.name,
@@ -378,19 +396,27 @@ class MessageTemplateHandler:
                     '{day_text}': ""
                 })
         
-        # Common document fields
+        # Common document fields with HTML cleaning for text fields
         common_fields = ['customer', 'supplier', 'posting_date', 'due_date', 
-                        'status', 'delivery_date', 'transaction_date']
+                        'status', 'delivery_date', 'transaction_date', 'description', 
+                        'remarks', 'subject', 'title']
+        
         for field in common_fields:
             if hasattr(doc, field):
                 value = getattr(doc, field)
-                if value and hasattr(value, 'strftime'):
-                    try:
-                        placeholders[f'{{{field}}}'] = formatdate(value)
-                    except:
-                        placeholders[f'{{{field}}}'] = str(value)
+                if value:
+                    # Clean HTML for string values (like description, remarks, etc.)
+                    if isinstance(value, str) and field in ['description', 'remarks', 'subject', 'title']:
+                        value = MessageTemplateHandler.clean_html(value)
+                    elif hasattr(value, 'strftime'):
+                        try:
+                            value = formatdate(value)
+                        except:
+                            value = str(value)
+                    
+                    placeholders[f'{{{field}}}'] = str(value)
                 else:
-                    placeholders[f'{{{field}}}'] = str(value) if value else ""
+                    placeholders[f'{{{field}}}'] = ""
         
         return placeholders
     
