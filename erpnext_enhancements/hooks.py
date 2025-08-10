@@ -51,10 +51,12 @@ doc_events = {
 }
 # KEEP your existing scheduler_events as is:
 scheduler_events = {
-    "daily": [
-        "erpnext_enhancements.api.whatsapp_reminders.whatsapp.send_scheduled_whatsapp_reminders"
+    "hourly": [
+        "erpnext_enhancements.api.whatsapp_reminders.whatsapp.send_scheduled_whatsapp_reminders_enhanced"
     ]
+    
 }
+
 # override_whitelisted_methods = {
 #     "frappe.desk.search.search_link": "erpnext_enhancements.api.item_search.custom_item_search"
 # }
@@ -373,13 +375,7 @@ fixtures = [
     {
         "doctype": "Custom Field",
         "filters": [
-            [
-                "name",
-                "in",
-                [
-                    "Purchase Order-remarks"
-                ]
-            ]
+            ["dt", "=", "WhatsApp Doctypes"]
         ]
     }
 ]

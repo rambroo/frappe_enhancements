@@ -1,0 +1,428 @@
+# WhatsApp Notification System - Complete Feature Guide
+
+## Overview
+This is a comprehensive WhatsApp notification system for Frappe/ERPNext that supports document events, scheduled reminders, PDF attachments, custom templates, and advanced user assignment handling.
+
+## Core Components
+
+### 1. WhatsAppHandler Class
+**Purpose**: Centralized message sending with PDF support and fallback mechanisms
+
+**Key Features**:
+- Unified message sending with/without PDF
+- Automatic fallback from PDF to text-only
+- Phone number validation and cleaning
+- Response handling with multiple success indicators
+- Temporary file management for PDFs
+
+**Usage**:
+```python
+handler = WhatsAppHandler()
+success = handler.send_message(
+    receiver_id="9876543210", 
+    message="Your document is ready",
+    doctype="Sales Invoice",
+    docname="SI-001",
+    pdf_content=pdf_bytes,  # Optional
+    fallback_to_text=True
+)
+```
+
+### 2. MessageTemplateHandler Class
+**Purpose**: Advanced message template processing with HTML cleanup and placeholder replacement
+
+**Key Features**:
+- **HTML Content Cleanup**: Removes Quill editor HTML tags and entities
+- **Custom Template Support**: Process WhatsApp Message Template documents
+- **Dynamic Placeholders**: Auto-replacement of field values
+- **Event-Specific Messages**: Different messages for different trigger events
+- **Fallback Messages**: Safe fallback when templates fail
+
+**Supported Placeholders**:
+```
+{doctype} - Document type
+{name}/{doc_name}/{document_name} - Document name
+{amount}/{total}/{grand_total} - Amount with ₹ symbol
+{due_date}/{target_date} - Due dates
+{days_remaining}/{days_left} - Days calculation
+{customer}/{supplier} - Party information
+{status} - Document status
+{description}/{remarks} - HTML-cleaned descriptions
+{field_name} - Any document field (auto-detected)
+```
+
+**Usage**:
+```python
+message = MessageTemplateHandler.build_message(
+    doc=sales_invoice,
+    doctype_setting=config,
+    is_reminder=True,
+    target_date="2024-12-31",
+    trigger_event="Scheduled Reminder"
+)
+```
+
+### 3. PDFGenerator Class
+**Purpose**: Multiple PDF generation methods with intelligent fallbacks
+
+**Key Features**:
+- **Auto Print Format Detection**: Finds default print format for each doctype
+- **Multiple Generation Methods**: 
+  - Frappe default PDF
+  - wkhtmltopdf with minimal options
+  - WeasyPrint support
+- **Cancelled Document Check**: Prevents PDF generation for cancelled docs
+- **HTML Cleanup**: Removes print buttons from PDF content (optional)
+
+**Usage**:
+```python
+pdf_content = PDFGenerator.generate_pdf(
+    doctype="Sales Invoice",
+    docname="SI-001",
+    print_format="Custom Format"  # Optional
+)
+```
+
+## Document Event Triggers
+
+### 1. Standard Document Events
+**Supported Events**:
+- `Submit` - When document is submitted
+- `Save` - When document is saved
+- `Cancel` - When document is cancelled
+- `On Creation` - When new document is created
+- `On Update` - When existing document is updated (excludes new docs)
+
+**Configuration**:
+- Each event can have separate WhatsApp configurations
+- Immediate trigger timing for all document events
+- Support for custom templates per event
+
+**Implementation**:
+```python
+# Auto-triggered by document hooks
+def handle_whatsapp_notification_submit(doc, method):
+    _handle_whatsapp_notification(doc, method, "Submit")
+```
+
+### 2. Scheduled Reminders
+**Purpose**: Time-based notifications independent of document changes
+
+**Configuration Options**:
+- **Trigger Timing**: Days Before/Days After target date
+- **Date Field**: Any date field in the document
+- **Schedule Frequency**: Controlled by Frappe scheduler
+- **Child Table Support**: Supports nested table date fields
+
+**Usage Example**:
+```python
+# Configuration for Payment Due Reminders
+{
+    "table_doctype": "Purchase Invoice",
+    "trigger_event": "Scheduled Reminder",
+    "trigger_timing": "Days Before",
+    "days_before": 3,
+    "date_field": "due_date",
+    "schedule_enabled": True
+}
+```
+
+## Phone Number Resolution System
+
+### 1. Standard Fields
+**Supported Formats**:
+- Direct fields: `mobile_no`, `phone`
+- Linked fields: `customer.mobile_no`, `supplier.phone`
+- Custom fields: Any field containing phone numbers
+
+### 2. User-Based Fields
+**Supported User Fields**:
+- `owner` - Document creator
+- `modified_by` - Last person who modified
+- `assigned_to` - Assigned user(s) via ToDo
+- `created_by` - Alternative creator field
+- `approved_by` - Approval workflow users
+- `submitted_by` - Submission user
+
+**User Phone Resolution**:
+- Checks multiple phone fields in User doctype: `mobile_no`, `phone`, `cell_number`, `whatsapp_number`
+- Automatic phone number validation and cleaning
+
+### 3. Assignment System (Multi-User Support)
+**Features**:
+- **Multiple Assignments**: Handles documents assigned to multiple users
+- **ToDo Integration**: Reads from ToDo doctype for current assignments
+- **Bulk Messaging**: Sends to all assigned users simultaneously
+- **Assignment Tracking**: Logs success/failure for each user
+
+**Usage**:
+```python
+# Get all assigned users' phone numbers
+assigned_phones = get_assigned_user_phone_numbers(doc)
+# Returns: [{'phone': '9876543210', 'user': 'user@example.com'}, ...]
+
+# Or use in configuration
+{
+    "phone_field": "assigned_to",  # Special handling for multiple assignments
+    "enable_whatsapp": True
+}
+```
+
+## Child Table Reminders (Advanced Feature)
+
+### 1. Automatic Child Table Detection
+**Purpose**: Send reminders for specific rows in child tables (like payment schedules)
+
+**Configuration Format**:
+```python
+{
+    "date_field": "payment_schedule.due_date",  # table_field.date_field
+    "trigger_event": "Scheduled Reminder",
+    "trigger_timing": "Days Before",
+    "days_before": 7
+}
+```
+
+### 2. Child Table Message Types
+**Individual Messages**: One message per child record
+```python
+{
+    "send_individual_child_messages": True  # Default
+}
+```
+
+**Consolidated Messages**: One message for all matching child records
+```python
+{
+    "send_individual_child_messages": False
+}
+```
+
+### 3. Child Table Placeholders
+**Additional Placeholders for Child Records**:
+```
+{child_amount} - Child record amount
+{child.due_date} - Child record due date
+{child_description} - Child record description
+{amount} - Direct field access (for child fields)
+{idx} - Child record index
+```
+
+## Template System
+
+### 1. WhatsApp Message Template DocType
+**Fields**:
+- Template Name
+- Template Text (with HTML editor support)
+- Is Active flag
+- DocType associations
+
+### 2. Template Processing
+**HTML Cleanup**: Automatically removes:
+- Quill editor div tags
+- HTML entities (&nbsp;, &amp;, etc.)
+- HTML tags and formatting
+- Extra whitespace
+
+**Dynamic Field Resolution**:
+- Automatic detection of `{field_name}` patterns
+- Parent document field access
+- Child table field access (for child reminders)
+- Date formatting for date fields
+
+### 3. Template Priority Order
+1. Custom Template (from WhatsApp Message Template)
+2. Reminder Message (from configuration)
+3. Default message format
+
+## Configuration System
+
+### 1. WhatsApp Settings (Single DocType)
+**Main Settings**:
+- `enabled` - Master enable/disable
+- `sender_id` - API sender ID
+- `auth_token` - API authentication token
+- `api_url` - WhatsApp API endpoint
+
+### 2. WhatsApp DocTypes (Child Table)
+**Per-DocType Configuration**:
+- `table_doctype` - Target document type
+- `enable_whatsapp` - Enable for this doctype
+- `trigger_event` - Event that triggers notification
+- `trigger_timing` - Immediate/Days Before/Days After
+- `phone_field` - Phone number source field
+- `attach_print` - Include PDF attachment
+- `custom_template` - Link to WhatsApp Message Template
+- `reminder_message` - Direct reminder text
+- `schedule_enabled` - Enable scheduled reminders
+- `date_field` - Date field for reminders
+
+## API Integration
+
+### 1. BotMaster Sender API
+**Endpoint**: `https://api.botmastersender.com/api/v2/?action=send`
+
+**Message Types**:
+- Text messages
+- Messages with PDF attachments
+- Bulk messages (for multiple assignments)
+
+**Response Handling**:
+- Multiple success indicators supported
+- JSON and non-JSON response parsing
+- Comprehensive error logging
+
+### 2. Phone Number Validation
+**Indian Mobile Number Validation**:
+- Removes formatting characters
+- Handles country code (+91)
+- Validates 10-digit numbers starting with 6,7,8,9
+- Returns clean number or None
+
+## Safety Features
+
+### 1. Installation Safety
+```python
+def safe_get_settings():
+    # Prevents errors during site installation/migration
+    if frappe.flags.in_install or frappe.flags.in_patch:
+        return None
+    # Checks if DocType exists before loading
+```
+
+### 2. Document State Validation
+- Skips cancelled documents (docstatus = 2)
+- Validates document existence before processing
+- Handles document permission errors gracefully
+
+### 3. Error Handling
+- Comprehensive error logging for all operations
+- Fallback mechanisms at every level
+- Safe failure without breaking document workflows
+
+## Scheduler Integration
+
+### 1. Main Scheduler Function
+```python
+def send_scheduled_whatsapp_reminders():
+    # Processes all scheduled reminder configurations
+    # Runs based on Frappe scheduler setup
+```
+
+### 2. Enhanced Scheduler
+```python
+def send_scheduled_whatsapp_reminders_enhanced():
+    # Includes child table reminder support
+    # Auto-detects child table configurations
+```
+
+### 3. Scheduler Setup
+```python
+# In hooks.py
+scheduler_events = {
+    "daily": [
+        "your_app.whatsapp.send_scheduled_whatsapp_reminders_enhanced"
+    ]
+}
+```
+
+## Utility Functions
+
+### 1. Testing Functions
+```python
+def test_whatsapp_connection():
+    # Tests API connectivity
+    # Returns status and message
+
+def send_whatsapp_without_pdf(receiver_id, message, doctype, docname):
+    # Emergency fallback without PDF
+```
+
+### 2. Backward Compatibility
+```python
+def send_whatsapp_message_with_attachment(receiver_id, message, doctype, docname, print_format, fallback_to_text):
+    # Wrapper for legacy code compatibility
+```
+
+## Usage Examples
+
+### 1. Basic Document Event
+```python
+# Configuration in WhatsApp Settings
+{
+    "table_doctype": "Sales Invoice",
+    "enable_whatsapp": True,
+    "trigger_event": "Submit",
+    "trigger_timing": "Immediate",
+    "phone_field": "customer.mobile_no",
+    "attach_print": True,
+    "custom_template": "Invoice Submit Template"
+}
+```
+
+### 2. User Assignment Notification
+```python
+# Configuration for assignment notifications
+{
+    "table_doctype": "Task",
+    "enable_whatsapp": True,
+    "trigger_event": "On Creation",
+    "phone_field": "assigned_to",  # Handles multiple assignments
+    "attach_print": False
+}
+```
+
+### 3. Payment Schedule Reminder
+```python
+# Child table reminder configuration
+{
+    "table_doctype": "Purchase Invoice",
+    "enable_whatsapp": True,
+    "trigger_event": "Scheduled Reminder",
+    "trigger_timing": "Days Before",
+    "days_before": 3,
+    "date_field": "payment_schedule.due_date",  # Child table field
+    "phone_field": "supplier.mobile_no",
+    "schedule_enabled": True,
+    "custom_template": "Payment Reminder Template"
+}
+```
+
+### 4. Custom Template Example
+```html
+<!-- WhatsApp Message Template -->
+Hello {customer},
+
+Your {doctype} *{name}* is now ready!
+
+Amount: {grand_total}
+Due Date: {due_date}
+Days Remaining: {days_remaining} {day_text}
+
+{description}
+
+Thank you for your business!
+```
+
+## Advanced Features Summary
+
+1. **Multi-User Assignment Support**: Handles multiple users assigned to same document
+2. **Child Table Reminders**: Nested table date-based reminders
+3. **HTML Content Cleanup**: Removes editor artifacts from messages
+4. **Intelligent PDF Generation**: Multiple fallback methods
+5. **Dynamic Template System**: Auto-detecting placeholders
+6. **Phone Number Resolution**: User-based and document-based fields
+7. **Event-Specific Handling**: Different logic for different events
+8. **Comprehensive Error Handling**: Safe failure at all levels
+9. **API Flexibility**: Works with different WhatsApp API providers
+10. **Scheduler Integration**: Time-based notifications
+
+## Maintenance Notes
+
+- All operations are logged for debugging
+- Settings validation prevents runtime errors
+- Modular design allows easy feature additions
+- Backward compatibility maintained for legacy implementations
+- Safe installation/migration handling
+
+This system provides enterprise-level WhatsApp notification capabilities with extensive customization options and robust error handling.
