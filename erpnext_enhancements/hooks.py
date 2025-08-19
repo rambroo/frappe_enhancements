@@ -51,18 +51,10 @@ doc_events = {
 }
 # KEEP your existing scheduler_events as is:
 scheduler_events = {
-    "cron": {
-        "00 12 * * *": [
-            "erpnext_enhancements.api.whatsapp_reminders.whatsapp.send_scheduled_whatsapp_reminders_enhanced"
-        ]
-    },
-    "hourly": [
-        "erpnext_enhancements.api.whatsapp_reminders.whatsapp.process_scheduled_whatsapp_time_reminders"  
+    "daily": [
+        "erpnext_enhancements.api.whatsapp_reminders.whatsapp.send_scheduled_whatsapp_reminders"
     ]
 }
-
-
-
 # override_whitelisted_methods = {
 #     "frappe.desk.search.search_link": "erpnext_enhancements.api.item_search.custom_item_search"
 # }
@@ -376,3 +368,18 @@ after_install = "erpnext_enhancements.install.after_install"
 # default_log_clearing_doctypes = {
 # 	"Logging DocType Name": 30  # days to retain logs
 # }
+
+fixtures = [
+    {
+        "doctype": "Custom Field",
+        "filters": [
+            [
+                "name",
+                "in",
+                [
+                    "Purchase Order-remarks"
+                ]
+            ]
+        ]
+    }
+]
