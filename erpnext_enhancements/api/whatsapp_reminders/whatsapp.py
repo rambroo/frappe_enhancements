@@ -1233,4 +1233,3 @@ def get_assigned_user_phone_numbers(doc):
             f"Assignment Phone Error - {doc.doctype}"
         )
         return []
-

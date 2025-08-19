@@ -1,319 +1,275 @@
-<!-- File: apps/erpnext_enhancements/erpnext_enhancements/templates/includes/po_review_modal_template.html -->
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Purchase Order Review - Mobile Responsive</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        .po-review {
-            padding: 15px;
-        }
-        
-        /* Mobile-first responsive tables */
-        @media (max-width: 768px) {
-            .table-responsive-mobile {
-                border: none;
-            }
-            
-            .table-responsive-mobile thead {
-                display: none;
-            }
-            
-            .table-responsive-mobile tbody tr {
-                display: block;
-                border: 1px solid #dee2e6;
-                margin-bottom: 15px;
-                border-radius: 8px;
-                padding: 10px;
-                background: #f8f9fa;
-            }
-            
-            .table-responsive-mobile tbody td {
-                display: block;
-                border: none;
-                padding: 5px 0;
-                text-align: left !important;
-            }
-            
-            .table-responsive-mobile tbody td:before {
-                content: attr(data-label) ": ";
-                font-weight: bold;
-                color: #495057;
-                display: inline-block;
-                min-width: 120px;
-            }
-            
-            .item-card {
-                border: 1px solid #dee2e6;
-                border-radius: 8px;
-                margin-bottom: 15px;
-                padding: 15px;
-                background: white;
-            }
-            
-            .item-header {
-                font-weight: bold;
-                color: #0d6efd;
-                margin-bottom: 10px;
-                font-size: 1.1em;
-            }
-            
-            .item-detail {
-                display: flex;
-                justify-content: space-between;
-                margin-bottom: 5px;
-                padding: 2px 0;
-            }
-            
-            .item-detail .label {
-                font-weight: 600;
-                color: #495057;
-                min-width: 120px;
-            }
-            
-            .item-detail .value {
-                text-align: right;
-                color: #212529;
-            }
-            
-            .sales-order-card {
-                border-left: 4px solid #0d6efd;
-                background: #f8f9fa;
-                padding: 15px;
-                margin-bottom: 15px;
-                border-radius: 0 8px 8px 0;
-            }
-        }
-        
-        /* Desktop styles */
-        @media (min-width: 769px) {
-            .mobile-only {
-                display: none;
-            }
-        }
-        
-        /* Mobile styles */
-        @media (max-width: 768px) {
-            .desktop-only {
-                display: none;
-            }
-            
-            h3 {
-                font-size: 1.5rem;
-            }
-            
-            h4 {
-                font-size: 1.25rem;
-                margin-top: 25px;
-                margin-bottom: 15px;
-            }
-        }
-        
-        .summary-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 10px;
-            padding: 20px;
-            margin: 20px 0;
-        }
-        
-        .summary-item {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 10px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid rgba(255,255,255,0.2);
-        }
-        
-        .summary-item:last-child {
-            border-bottom: none;
-            font-weight: bold;
-            font-size: 1.1em;
-        }
-        
-        .badge-custom {
-            background: #28a745;
-            color: white;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.8em;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Purchase Order Review - Mobile Responsive</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    .po-review {
+      padding: 15px;
+    }
+
+    /* Mobile-first responsive tables */
+    @media (max-width: 768px) {
+      .table-responsive-mobile {
+        border: none;
+      }
+      .table-responsive-mobile thead {
+        display: none;
+      }
+      .table-responsive-mobile tbody tr {
+        display: block;
+        border: 1px solid #dee2e6;
+        margin-bottom: 15px;
+        border-radius: 8px;
+        padding: 10px;
+        background: #f8f9fa;
+      }
+      .table-responsive-mobile tbody td {
+        display: block;
+        border: none;
+        padding: 5px 0;
+        text-align: left !important;
+      }
+      .table-responsive-mobile tbody td:before {
+        content: attr(data-label) ": ";
+        font-weight: bold;
+        color: #495057;
+        display: inline-block;
+        min-width: 120px;
+      }
+      .item-card {
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        margin-bottom: 15px;
+        padding: 15px;
+        background: white;
+      }
+      .item-header {
+        font-weight: bold;
+        color: #0d6efd;
+        margin-bottom: 10px;
+        font-size: 1.1em;
+      }
+      .item-detail {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 5px;
+        padding: 2px 0;
+      }
+      .item-detail .label {
+        font-weight: 600;
+        color: #495057;
+        min-width: 120px;
+      }
+      .item-detail .value {
+        text-align: right;
+        color: #212529;
+      }
+      .sales-order-card {
+        border-left: 4px solid #0d6efd;
+        background: #f8f9fa;
+        padding: 15px;
+        margin-bottom: 15px;
+        border-radius: 0 8px 8px 0;
+      }
+    }
+
+    /* Desktop styles */
+    @media (min-width: 769px) {
+      .mobile-only {
+        display: none;
+      }
+    }
+
+    /* Mobile styles */
+    @media (max-width: 768px) {
+      .desktop-only {
+        display: none;
+      }
+      h3 {
+        font-size: 1.5rem;
+      }
+      h4 {
+        font-size: 1.25rem;
+        margin-top: 25px;
+        margin-bottom: 15px;
+      }
+    }
+
+    .summary-card {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-radius: 10px;
+      padding: 20px;
+      margin: 20px 0;
+    }
+    .summary-item {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    .summary-item:last-child {
+      border-bottom: none;
+      font-weight: bold;
+      font-size: 1.1em;
+    }
+    .badge-custom {
+      background: #28a745;
+      color: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.8em;
+    }
+
+    /* Read-only field styling */
+    .readonly-field {
+      background-color: #f8f9fa;
+      border: 1px solid #e9ecef;
+      padding: 12px;
+      border-radius: 4px;
+      min-height: 100px;
+      color: #495057;
+      white-space: pre-wrap;
+    }
+  </style>
 </head>
-<div class="po-review">
+<body>
+  <div class="po-review">
     <h3>Purchase Order Review Summary</h3>
 
-    <!-- Modify the Purchase Order Details table: -->
+    <!-- Purchase Order Details -->
     <h4>Purchase Order Details</h4>
     <table class="table table-bordered">
-        <tr><th>PO ID</th><td>{{ header.po_id }}</td></tr>
-        <tr><th>Date</th><td>{{ header.date }}</td></tr>
-        <tr><th>Vendor</th><td>{{ header.vendor }}</td></tr>
-        <tr><th>Warehouse</th><td>{{ header.warehouse }}</td></tr>
-        <tr><th>Sales Person</th><td>{{ header.custom_sales_person }}</td></tr>
+      <tr><th>PO ID</th><td>{{ header.po_id }}</td></tr>
+      <tr><th>Date</th><td>{{ header.date }}</td></tr>
+      <tr><th>Vendor</th><td>{{ header.vendor }}</td></tr>
+      <tr><th>Warehouse</th><td>{{ header.warehouse }}</td></tr>
+      <tr><th>Sales Person</th><td>{{ header.custom_sales_person }}</td></tr>
     </table>
 
+    <!-- Purchase Items -->
     <h4>Purchase Items</h4>
     <table class="table table-striped">
-        <thead>
-            <tr>
-                <th>Item Name</th><th>SKU</th><th>Qty</th><th>UOM</th>
-                <th>Price (Excl. Tax)</th><th>Price (Incl. Tax)</th>
-                <th>Purchase Price</th><th>Selling Price</th><th>Selling Total</th>
-                <th>Warehouse</th><th>Stock</th><th>Discount %</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for item in purchase_items %}
-            <tr>
-                <td>{{ item.item_name }}</td>
-                <td>{{ item.sku_code }}</td>
-                <td>{{ item.qty }}</td>
-                <td>{{ item.unit }}</td>
-                <td>{{ item.purchase_price_excl_tax }}</td>
-                <td>{{ item.purchase_price_incl_tax }}</td>
-                <td>{{ item.purchase_price }}</td>
-                <td>{{ item.selling_price }}</td>
-                <td>{{ "₹{:,.2f}".format(item.selling_total) }}</td>
-                <td>{{ item.warehouse }}</td>
-                <td>{{ item.physical_stock }}</td>
-                <td>{{ item.discount or 0 }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
+      <thead>
+        <tr>
+          <th>Item Name</th>
+          <th>SKU</th>
+          <th>Qty</th>
+          <th>UOM</th>
+          <th>Price (Excl. Tax)</th>
+          <th>Price (Incl. Tax)</th>
+          <th>Purchase Price</th>
+          <th>Selling Price</th>
+          <th>Selling Total</th>
+          <th>Warehouse</th>
+          <th>Stock</th>
+          <th>Discount %</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in purchase_items %}
+        <tr>
+          <td>{{ item.item_name }}</td>
+          <td>{{ item.sku_code }}</td>
+          <td>{{ item.qty }}</td>
+          <td>{{ item.unit }}</td>
+          <td>{{ item.purchase_price_excl_tax }}</td>
+          <td>{{ item.purchase_price_incl_tax }}</td>
+          <td>{{ item.purchase_price }}</td>
+          <td>{{ item.selling_price }}</td>
+          <td>{{ "₹{:,.2f}".format(item.selling_total) }}</td>
+          <td>{{ item.warehouse }}</td>
+          <td>{{ item.physical_stock }}</td>
+          <td>{{ item.discount or 0 }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
     </table>
 
+    <!-- Sales Order Details -->
     <h4>Sales Order Details</h4>
     <table class="table table-hover">
-        <thead>
-            <tr>
-                <th>Order ID</th><th>Customer</th><th>Salesperson</th><th>Influencer</th>
-                <th>Commission</th><th>Advance Paid</th><th>Credit Limit</th>
-                <th>Delivery Date</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for s in sales_details %}
-            <tr>
-                <td>{{ s.order_id }}</td>
-                <td>{{ s.customer }}</td>
-                <td>{{ s.salesman or '-' }}</td>
-                <td>{{ s.influencer or '-' }}</td>
-                <td>{{ s.commission_value or 0 }}</td>
-                <td>{{ s.advance_amount or 0 }}</td>
-                <td>{{ s.credit_limit or 0 }}</td>
-                <td>{{ s.delivery_date or '-' }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
+      <thead>
+        <tr>
+          <th>Order ID</th>
+          <th>Customer</th>
+          <th>Salesperson</th>
+          <th>Influencer</th>
+          <th>Commission</th>
+          <th>Advance Paid</th>
+          <th>Credit Limit</th>
+          <th>Delivery Date</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in sales_details %}
+        <tr>
+          <td>{{ s.order_id }}</td>
+          <td>{{ s.customer }}</td>
+          <td>{{ s.salesman or '-' }}</td>
+          <td>{{ s.influencer or '-' }}</td>
+          <td>{{ s.commission_value or 0 }}</td>
+          <td>{{ s.advance_amount or 0 }}</td>
+          <td>{{ s.credit_limit }}</td>
+          <td>{{ s.delivery_date or '-' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
     </table>
 
-    <br/>
-    <h4>Summary:</h4>
+    <!-- Summary -->
+    <h4>Summary</h4>
     <table class="table table-sm">
-        <tr><th>Total Discount from Purchase Order</th><td>{{ purchase_total_discount }}</td></tr>
-        <tr><th>Total Discount from Sales Orders</th><td>{{ sales_total_discount }}</td></tr>
-        <tr><th>Total Discount:</th><td>{{ total_discount }}</td></tr>
+      <tr><th>Total Discount from Purchase Order</th><td>{{ purchase_total_discount }}</td></tr>
+      <tr><th>Total Discount from Sales Orders</th><td>{{ sales_total_discount }}</td></tr>
+      <tr><th>Total Discount:</th><td>{{ total_discount }}</td></tr>
     </table>
 
-    <!-- Remarks section at the bottom -->
-    <div class="row mt-4">
-        <div class="col-md-12">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Remarks</h5>
-                    {% if read_only %}
-                    <div class="form-control-plaintext" style="min-height: 100px; border: 1px solid #e9ecef; padding: 12px; background-color: #f8f9fa;">
-                        {{ remarks or "No remarks added" }}
-                    </div>
-                    {% else %}
-                    <textarea class="form-control" 
-                              id="po-remarks" 
-                              rows="4" 
-                              placeholder="Enter remarks here (e.g., Cash on Delivery, Special Instructions, etc.)">{{ remarks }}</textarea>
-                    {% endif %}
-                </div>
-            </div>
+<!-- Additional Information -->
+    <div style="margin: 10px 0;">
+        <h4 style="margin: 0 0 4px 0; font-size: 14px; font-weight: 600; color: #333;">
+            Internal Remarks
+        </h4>
+        <div style="border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; font-size: 13px; min-height: 20px; max-width: 400px; word-wrap: break-word;">
+            {{ custom_internal_remarks or "No internal remarks" }}
         </div>
     </div>
-</div>
 
-{% if not read_only %}
-<script>
-// Add event listeners for remarks changes only (only in editable mode)
-document.addEventListener('DOMContentLoaded', function() {
-    // Handle remarks changes only when not in read-only mode
-    const remarksTextarea = document.getElementById('po-remarks');
-    if (remarksTextarea) {
-        remarksTextarea.addEventListener('change', function() {
-            console.log('Remarks changed:', this.value);
-            // You can add logic here to update the backend if needed
-        });
-    }
-});
-</script>
-{% endif %}
+    <div style="margin: 10px 0;">
+        <h4 style="margin: 0 0 4px 0; font-size: 14px; font-weight: 600; color: #333;">
+            Notes
+        </h4>
+        <div style="border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; font-size: 13px; min-height: 20px; max-width: 400px; word-wrap: break-word;">
+            {{ custom_note or "No notes" }}
+        </div>
+    </div>
 
-<!-- File: apps/erpnext_enhancements/erpnext_enhancements/templates/includes/po_review_modal_template.html
-<div class="po-review">
-    <h3>Purchase Order Review Summary</h3>
 
-    <h4>Purchase Order Details</h4>
-    <table class="table table-bordered">
-        <tr><th>PO ID</th><td>{{ header.po_id }}</td></tr>
-        <tr><th>Date</th><td>{{ header.date }}</td></tr>
-        <tr><th>Vendor</th><td>{{ header.vendor }}</td></tr>
-        <tr><th>Warehouse</th><td>{{ header.warehouse }}</td></tr>
-    </table>
 
-    <h4>Purchase Items</h4>
-    <table class="table table-striped">
-        <thead>
-            <tr>
-                <th>Item Name</th><th>SKU</th><th>Qty</th><th>UOM</th>
-                <th>Price (Excl. Tax)</th><th>Price (Incl. Tax)</th><th>Warehouse</th>
-                <th>Stock</th><th>Discount %</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for item in purchase_items %}
-            <tr>
-                <td>{{ item.item_name }}</td><td>{{ item.sku_code }}</td><td>{{ item.qty }}</td><td>{{ item.unit }}</td>
-                <td>{{ item.purchase_price_excl_tax }}</td><td>{{ item.purchase_price_incl_tax }}</td>
-                <td>{{ item.warehouse }}</td><td>{{ item.physical_stock }}</td><td>{{ item.discount or 0 }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-    <h4>Sales Order Details</h4>
-    <table class="table table-hover">
-        <thead>
-            <tr>
-                <th>Order ID</th><th>Customer</th><th>Salesperson</th><th>Influencer</th>
-                <th>Commission</th><th>Advance Paid</th><th>Credit Limit</th>
-                <th>Delivery Date</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for s in sales_details %}
-            <tr>
-                <td>{{ s.order_id }}</td><td>{{ s.customer }}</td><td>{{ s.salesman or '-' }}</td><td>{{ s.influencer or '-' }}</td>
-                <td>{{ s.commission_value or 0 }}</td><td>{{ s.advance_amount or 0 }}</td><td>{{ s.credit_limit or 0 }}</td>
-                <td>{{ s.delivery_date or '-' }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-    <br/>
-    <h4>Summary:</h4>
-    <table class="table table-sm">
-        <tr><th>Total Discount from Purchase Order</th><td>{{ purchase_total_discount }}</td></tr>
-        <tr><th>Total Discount from Sales Orders</th><td>{{ sales_total_discount }}</td></tr>
-        <tr><th>Total Discount:</th><td>{{ total_discount }}</td></tr>
-    </table>
-</div> -->
+    <!-- Remarks -->
+    <div class="row mt-4">
+      <div class="col-md-12">
+        <div class="card">
+        <div class="card-body">
+        <h5 class="card-title">Remarks</h5>
+        {% if read_only %}
+            <div class="readonly-field">
+            {{ custom_remarks or "No remarks added" }}
+            </div>
+        {% else %}
+            <textarea class="form-control"
+                    id="po-remarks"
+                    rows="4"
+                    placeholder="Enter remarks here (e.g., Cash on Delivery, Special Instructions, etc.)">{{ custom_remarks or "" }}</textarea>
+        {% endif %}
+        </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
