@@ -51,11 +51,17 @@ doc_events = {
 }
 # KEEP your existing scheduler_events as is:
 scheduler_events = {
+    "cron": {
+        "00 12 * * *": [
+            "erpnext_enhancements.api.whatsapp_reminders.whatsapp.send_scheduled_whatsapp_reminders_enhanced"
+        ]
+    },
     "hourly": [
-        "erpnext_enhancements.api.whatsapp_reminders.whatsapp.send_scheduled_whatsapp_reminders_enhanced"
+        "erpnext_enhancements.api.whatsapp_reminders.whatsapp.process_scheduled_whatsapp_time_reminders"  
     ]
-    
 }
+
+
 
 # override_whitelisted_methods = {
 #     "frappe.desk.search.search_link": "erpnext_enhancements.api.item_search.custom_item_search"
@@ -371,11 +377,42 @@ after_install = "erpnext_enhancements.install.after_install"
 # 	"Logging DocType Name": 30  # days to retain logs
 # }
 
+
 fixtures = [
     {
         "doctype": "Custom Field",
-        "filters": [
-            ["dt", "=", "WhatsApp Doctypes"]
-        ]
-    }
+    },
+    {
+        "doctype": "Property Setter",
+    },
+    {
+        "doctype": "Client Script",
+    },
+    {
+        "doctype": "Print Format",
+    },
+    {
+        "doctype": "Workflow",
+
+    },
+    {
+        "doctype": "Workflow State",
+
+    },
+    {
+        "doctype": "Role",  # Includes newly created roles
+        "filters": [["disabled", "=", 0]]  # Excludes disabled roles
+    },
+    {
+        "doctype": "Custom DocPerm",  # Includes role permission manager customizations
+    },
+    {
+        "doctype": "Role Permission for Page and Report",  # Includes page & report permissions
+    },
+    {"doctype": "Report"},  # Custom reports created in ERPNext
+    {"doctype": "Page"},  # Custom pages you might have created
+    {"doctype": "Module Def"},  # Any custom modules created in your app
+    {"doctype": "Notification"},  # Custom email/SMS notifications set up
+    {"doctype": "Workflow Action Master"},  # Custom workflow actions
+    {"doctype": "Terms and Conditions"},  # Custom terms and conditions
 ]
