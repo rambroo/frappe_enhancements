@@ -185,8 +185,8 @@ def parse_fields(fields: Union[str, List[str], None]) -> List[str]:
     for field in field_list:
         if field in valid_fields:
             validated_fields.append(field)
-        else:
-            frappe.log_error(f"Invalid field '{field}' requested in item search", "Item Search Warning")
+        # else:
+        #     frappe.log_error(f"Invalid field '{field}' requested in item search", "Item Search Warning")
     
     # Ensure essential fields are included for your specific use case
     essential_fields = ['name', 'item_code', 'item_name', 'custom_sku_code', 'brand', 'standard_rate', 'image', 'max_discount', 'stock_uom']
