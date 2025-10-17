@@ -5,20 +5,20 @@ app_description = "Used for common features in Clients"
 app_email = "rohan@micronxt.com"
 app_license = "mit"
 
-# Apps
-# ------------------
-# doctype_js = {
-#     "Purchase Order": "public/js/purchase_order_review.js"
-# }
 
 # required_apps = []
-# hi
-# Updated hooks.py
+
 doctype_js = {
     "Purchase Order": "public/js/purchase_order_review.js",
     "Sales Order": "public/js/sales_order.js",
-    "Payment Entry": "public/js/payment_entry_review.js",
+    "Payment Entry": "public/js/payment_entry_review.js"
 }
+
+doctype_list_js = {
+    "GST HSN Code": "public/js/gst_hsn_code_list.js"
+}
+# Document Events
+
 
 jenv = {
     "jinja": [
@@ -47,8 +47,15 @@ doc_events = {
         "on_cancel": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_cancel",
         "after_insert": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_creation",
         "on_update": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_update"
+    },
+    "Sales Invoice": {
+        "on_submit": "erpnext_enhancements.api.sales_invoice_s3.on_submit"
     }
+
+
 }
+
+
 # KEEP your existing scheduler_events as is:
 scheduler_events = {
     "cron": {
@@ -60,7 +67,6 @@ scheduler_events = {
         "erpnext_enhancements.api.whatsapp_reminders.whatsapp.process_scheduled_whatsapp_time_reminders"  
     ]
 }
-
 
 
 # override_whitelisted_methods = {

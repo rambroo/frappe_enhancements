@@ -1,0 +1,67 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-10-10 18:56:26.001496",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "hsn_settings_section",
+  "hsn_s3_url",
+  "file_url_for_hsn",
+  "sales_invoice_pdf_section",
+  "si_enable_attachment"
+ ],
+ "fields": [
+  {
+   "fieldname": "hsn_settings_section",
+   "fieldtype": "Section Break",
+   "label": "HSN Settings"
+  },
+  {
+   "fieldname": "hsn_s3_url",
+   "fieldtype": "Data",
+   "label": "HSN Codes S3 File URL"
+  },
+  {
+   "fieldname": "file_url_for_hsn",
+   "fieldtype": "Data",
+   "label": "File Url for HSN"
+  },
+  {
+   "fieldname": "sales_invoice_pdf_section",
+   "fieldtype": "Section Break",
+   "label": "Sales Invoice PDF"
+  },
+  {
+   "default": "0",
+   "fieldname": "si_enable_attachment",
+   "fieldtype": "Check",
+   "label": "Enable Attachment"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2025-10-15 19:25:37.521758",
+ "modified_by": "Administrator",
+ "module": "erpnext_enhancements",
+ "name": "Erpnext Enhancement Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
