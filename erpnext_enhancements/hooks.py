@@ -5,6 +5,80 @@ app_description = "Used for common features in Clients"
 app_email = "rohan@micronxt.com"
 app_license = "mit"
 
+<<<<<<< Updated upstream
+=======
+# razorpay integration
+# Fixtures - Export these for easy migration to other sites
+# fixtures = [
+#     {
+#         "dt": "Custom Field",
+#         "filters": [
+#             [
+#                 "name", "in", [
+#                     # Sales Invoice Custom Fields
+#                     "Sales Invoice-custom_razorpay_section",
+#                     "Sales Invoice-custom_razorpay_payment_links",
+#                     "Sales Invoice-custom_razorpay_summary_section",
+#                     "Sales Invoice-custom_last_payment_link",
+#                     "Sales Invoice-custom_total_razorpay_payments",
+#                     "Sales Invoice-custom_razorpay_column_break",
+#                     "Sales Invoice-custom_razorpay_payment_percentage",
+#                     "Sales Invoice-custom_razorpay_outstanding",
+#                     # Payment Entry Custom Fields
+#                     "Payment Entry-custom_razorpay_details_section",
+#                     "Payment Entry-custom_razorpay_payment_id",
+#                     "Payment Entry-custom_razorpay_payment_method",
+#                     "Payment Entry-custom_razorpay_payment_status",
+#                     "Payment Entry-custom_razorpay_column_break",
+#                     "Payment Entry-custom_razorpay_card_network",
+#                     "Payment Entry-custom_razorpay_card_last4",
+#                     "Payment Entry-custom_razorpay_upi_id",
+#                     "Payment Entry-custom_razorpay_bank_name",
+#                     "Payment Entry-custom_razorpay_wallet_name"
+#                 ]
+#             ]
+#         ]
+#     },
+#     # DocTypes - These will be exported with all their fields
+#     {
+#         "dt": "DocType",
+#         "filters": [
+#             [
+#                 "name", "in", [
+#                     "Razorpay Settings",
+#                     "Razorpay Payment Link"
+#                 ]
+#             ]
+#         ]
+#     }
+# ]
+
+# razorpay integration
+
+
+# material received whatsapp message
+# doc_events = {
+#     "Purchase Receipt": {
+#         "on_submit": "erpnext_enhancements.custom_functions.Materials_received_whatsapp_message.send_material_receipt_notifications"
+#     },
+#     "Stock Entry": {
+#         "on_submit": "erpnext_enhancements.custom_functions.Materials_received_whatsapp_message.send_material_receipt_notifications"
+#     }
+# }
+
+
+# doc_events = {
+#     "Purchase Receipt": {
+#         "on_submit": "erpnext_enhancements.erpnext_enhancements.custom_functions.Materials_received_whatsapp_message.send_material_receipt_notifications"
+#     },
+#     "Stock Entry": {
+#         "on_submit": "erpnext_enhancements.erpnext_enhancements.custom_functions.Materials_received_whatsapp_message.send_material_receipt_notifications"
+#     }
+# }
+# material received whatsapp message
+
+
+>>>>>>> Stashed changes
 # Apps
 # ------------------
 
