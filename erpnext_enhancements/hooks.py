@@ -5,6 +5,39 @@ app_description = "Used for common features in Clients"
 app_email = "rohan@micronxt.com"
 app_license = "mit"
 
+# material received whatsapp message
+doc_events = {
+    "Purchase Receipt": {
+        "on_submit": "erpnext_enhancements.custom_functions.Materials_received_whatsapp_message.send_material_receipt_notifications"
+    },
+    "Stock Entry": {
+        "on_submit": "erpnext_enhancements.custom_functions.Materials_received_whatsapp_message.send_material_receipt_notifications"
+    }
+}
+
+
+doc_events = {
+    "Purchase Receipt": {
+        "on_submit": "erpnext_enhancements.erpnext_enhancements.custom_functions.Materials_received_whatsapp_message.send_material_receipt_notifications"
+    },
+    "Stock Entry": {
+        "on_submit": "erpnext_enhancements.erpnext_enhancements.custom_functions.Materials_received_whatsapp_message.send_material_receipt_notifications"
+    }
+}
+# material received whatsapp message
+
+
+
+# doc_events = {
+#     "Purchase Receipt": {
+#         "on_submit": "erpnext_enhancements.erpnext_enhancements.custom_functions.Materials_received_whatsapp_message.send_material_receipt_notifications"
+#     },
+#     "Stock Entry": {
+#         "on_submit": "erpnext_enhancements.erpnext_enhancements.custom_functions.Materials_received_whatsapp_message.send_material_receipt_notifications"
+#     }
+# }
+# material received whatsapp message
+
 # Apps
 # ------------------
 
