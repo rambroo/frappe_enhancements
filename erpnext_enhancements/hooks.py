@@ -5,6 +5,28 @@ app_description = "Used for common features in Clients"
 app_email = "rohan@micronxt.com"
 app_license = "mit"
 
+
+
+# WhatsApp message hooks
+doc_events = {
+    # 🌍 Global handlers for all doctypes
+    "*": {
+        "on_submit": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_submit",
+        "before_save": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_save",
+        "on_cancel": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_cancel",
+        "after_insert": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_creation",
+        "on_update": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_update",
+    },
+
+    # 📦 Specific handlers for materials received
+    "Purchase Receipt": {
+        "on_submit": "erpnext_enhancements.custom_functions.Materials_received_whatsapp_message.send_material_receipt_notifications"
+    },
+    "Stock Entry": {
+        "on_submit": "erpnext_enhancements.custom_functions.Materials_received_whatsapp_message.send_material_receipt_notifications"
+    },
+}
+
 # Apps
 # ------------------
 # doctype_js = {
