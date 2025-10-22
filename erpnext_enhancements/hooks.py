@@ -46,7 +46,13 @@ doc_events = {
     },
     "Sales Invoice": {
         "on_submit": "erpnext_enhancements.api.sales_invoice_s3.on_submit"
-    }
+    },
+    "Purchase Receipt": {
+        "on_submit": "erpnext_enhancements.custom_functions.Materials_received_whatsapp_message.send_material_receipt_notifications"
+    },
+    "Stock Entry": {
+        "on_submit": "erpnext_enhancements.custom_functions.Materials_received_whatsapp_message.send_material_receipt_notifications"
+    },
 
 
 }

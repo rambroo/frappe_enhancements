@@ -1,4 +1,3 @@
-# File: apps/erpnext_enhancements/erpnext_enhancements/api/po_preview.py
 import frappe
 from frappe import _
 
@@ -7,12 +6,43 @@ def render_po_review_template(purchase_order, read_only):
     po = frappe.get_doc("Purchase Order", purchase_order)
     read_only = frappe.parse_json(read_only) if isinstance(read_only, str) else read_only
 
+    # Get sales person from linked sales orders
+    sales_persons = []
+    customers = set()
+    for item in po.items:
+        if item.sales_order:
+            try:
+                so = frappe.get_doc("Sales Order", item.sales_order)
+                customers.add(so.customer)
+                if so.sales_team:
+                    for sales_member in so.sales_team:
+                        if sales_member.sales_person and sales_member.sales_person not in sales_persons:
+                            sales_persons.append(sales_member.sales_person)
+            except Exception:
+                continue
+
+    # If still empty, fetch from linked Customers' sales team
+    if not sales_persons and customers:
+        for customer in customers:
+            try:
+                customer_doc = frappe.get_doc("Customer", customer)
+                if customer_doc.sales_team:
+                    for sales_member in customer_doc.sales_team:
+                        if sales_member.sales_person and sales_member.sales_person not in sales_persons:
+                            sales_persons.append(sales_member.sales_person)
+            except Exception:
+                continue
+
+    # Format sales persons - join multiple with comma or show "-" if none
+    custom_sales_person = ", ".join(sales_persons) if sales_persons else "-"
+
+
     header_info = {
         "po_id": po.name,
         "date": po.transaction_date,
         "vendor": f"{po.supplier} ({po.supplier_name})" if po.supplier_name else po.supplier,
         "warehouse": po.set_warehouse or (po.items[0].warehouse if po.items else None),
-        "custom_sales_person": po.custom_sales_person or "-",
+        "custom_sales_person": custom_sales_person,  # Now fetched from SO sales team
     }
 
     purchase_items = []
