@@ -13,10 +13,6 @@ doctype_js = {
     "Sales Order": "public/js/sales_order.js",
     "Payment Entry": "public/js/payment_entry_review.js"
 }
-
-doctype_list_js = {
-    "GST HSN Code": "public/js/gst_hsn_code_list.js"
-}
 # Document Events
 
 
