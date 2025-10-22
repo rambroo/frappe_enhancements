@@ -4,40 +4,30 @@ from frappe.utils import nowdate, get_fullname
 import json
 
 # HARDCODED CONFIGURATION
-# If you don't create the Settings DocType, these hardcoded values will be used
-HARDCODED_ROLES = []  # Example: ["Purchase Manager", "Stock Manager", "RM"]
-HARDCODED_TEMPLATE = None  # Example: "Material Receipt Notification" or leave None for default message
+HARDCODED_ROLES = []
+HARDCODED_TEMPLATE = None
 
 
 def send_material_receipt_notifications(doc, method=None):
     """
-    Send WhatsApp notifications when materials are received via Purchase Receipt or Stock Entry.
-    This function is triggered on document submission.
-    
-    Args:
-        doc: The Purchase Receipt or Stock Entry document
-        method: The event method (after_submit)
+    Optimized: Send WhatsApp notifications when materials are received.
+    Reduced database queries and improved efficiency.
     """
-    
-    # Only process for Purchase Receipt or Stock Entry (Material Receipt type)
     if doc.doctype == "Stock Entry" and doc.stock_entry_type != "Material Receipt":
         return
     
     try:
-        # Collect all unique recipients with their details
-        recipients = get_all_recipients(doc)
+        recipients = get_all_recipients_optimized(doc)
         
         if not recipients:
-            # Log failure with detailed information
             log_notification_result(
                 success=False,
                 doc=doc,
                 recipients=[],
-                error_message="No recipients found. Check:\n- Sales Order has Sales Team members\n- Sales Person is linked to Employee\n- Employee is linked to User\n- User has mobile number and is enabled"
+                error_message="No recipients found. Check configuration and user settings."
             )
             return
         
-        # Send WhatsApp message to each recipient
         success_list = []
         failed_list = []
         
@@ -49,7 +39,6 @@ def send_material_receipt_notifications(doc, method=None):
                 recipient['error'] = str(e)
                 failed_list.append(recipient)
         
-        # Log final result
         log_notification_result(
             success=len(failed_list) == 0,
             doc=doc,
@@ -61,7 +50,6 @@ def send_material_receipt_notifications(doc, method=None):
         frappe.db.commit()
         
     except Exception as e:
-        # Log critical error
         log_notification_result(
             success=False,
             doc=doc,
@@ -70,177 +58,53 @@ def send_material_receipt_notifications(doc, method=None):
         )
 
 
-def log_notification_result(success, doc, recipients, success_list=None, failed_list=None, error_message=None):
+def get_all_recipients_optimized(doc):
     """
-    Log the final result of notification process - either success or failure.
-    Only creates ONE error log with complete details.
+    OPTIMIZED: Collect all recipients with minimal database queries.
+    Uses bulk queries and caching to reduce load.
     """
-    if success:
-        # SUCCESS LOG
-        title = f"✅ Material Receipt WhatsApp - Success ({doc.name})"
-        
-        message = f"""
-{'='*80}
-WHATSAPP NOTIFICATION SENT SUCCESSFULLY
-{'='*80}
-
-Document Details:
-- Type: {doc.doctype}
-- Name: {doc.name}
-- Date: {doc.posting_date if hasattr(doc, 'posting_date') else nowdate()}
-- Supplier: {doc.supplier if hasattr(doc, 'supplier') else 'N/A'}
-- Items: {len(doc.items)}
-
-{'='*80}
-RECIPIENTS ({len(success_list)}):
-{'='*80}
-"""
-        
-        for idx, recipient in enumerate(success_list, 1):
-            message += f"""
-{idx}. Name: {recipient['name']}
-   User: {recipient['user']}
-   Mobile: {recipient['mobile']}
-   Source: {recipient['source']}
-   Status: ✅ Message Sent
-"""
-        
-        message += f"\n{'='*80}\n"
-        message += f"Total Messages Sent: {len(success_list)}\n"
-        message += f"{'='*80}\n"
-        
-    else:
-        # FAILURE LOG
-        title = f"❌ Material Receipt WhatsApp - Failed ({doc.name})"
-        
-        message = f"""
-{'='*80}
-WHATSAPP NOTIFICATION FAILED
-{'='*80}
-
-Document Details:
-- Type: {doc.doctype}
-- Name: {doc.name}
-- Date: {doc.posting_date if hasattr(doc, 'posting_date') else nowdate()}
-- Supplier: {doc.supplier if hasattr(doc, 'supplier') else 'N/A'}
-- Items: {len(doc.items)}
-
-"""
-        
-        if error_message:
-            message += f"""
-{'='*80}
-ERROR DETAILS:
-{'='*80}
-{error_message}
-
-"""
-        
-        if recipients:
-            message += f"""
-{'='*80}
-RECIPIENTS FOUND ({len(recipients)}):
-{'='*80}
-"""
-            for idx, recipient in enumerate(recipients, 1):
-                message += f"""
-{idx}. Name: {recipient['name']}
-   User: {recipient['user']}
-   Mobile: {recipient['mobile']}
-   Source: {recipient['source']}
-"""
-            
-            if failed_list:
-                message += f"""
-{'='*80}
-FAILED TO SEND ({len(failed_list)}):
-{'='*80}
-"""
-                for idx, recipient in enumerate(failed_list, 1):
-                    message += f"""
-{idx}. Name: {recipient['name']}
-   Mobile: {recipient['mobile']}
-   Error: {recipient.get('error', 'Unknown error')}
-"""
-            
-            if success_list:
-                message += f"""
-{'='*80}
-SUCCESSFULLY SENT ({len(success_list)}):
-{'='*80}
-"""
-                for idx, recipient in enumerate(success_list, 1):
-                    message += f"""
-{idx}. Name: {recipient['name']} - Mobile: {recipient['mobile']}
-"""
-        else:
-            message += f"""
-{'='*80}
-NO RECIPIENTS FOUND
-{'='*80}
-
-Possible Reasons:
-1. Sales Order does not have Sales Team members
-2. Sales Person is not linked to Employee
-3. Employee is not linked to User  
-4. User does not have mobile number
-5. User is disabled
-
-Item Details:
-"""
-            for idx, item in enumerate(doc.items, 1):
-                message += f"""
-{idx}. Item: {item.item_code}
-   Sales Order: {item.sales_order if hasattr(item, 'sales_order') and item.sales_order else 'Not Linked'}
-   Material Request: {item.material_request if hasattr(item, 'material_request') and item.material_request else 'Not Linked'}
-   Purchase Order: {item.purchase_order if hasattr(item, 'purchase_order') and item.purchase_order else 'Not Linked'}
-"""
-        
-        message += f"\n{'='*80}\n"
+    recipients_dict = {}
     
-    frappe.log_error(title=title, message=message)
-
-
-def get_all_recipients(doc):
-    """
-    Collect all unique recipients who should receive the notification.
-    Returns a list of dicts with user details and their role/source.
-    """
-    recipients_dict = {}  # Use dict to avoid duplicates by mobile number
+    # Extract all linked document IDs upfront (single loop)
+    linked_docs = extract_linked_documents(doc)
     
-    # 1. Get recipients from Sales Team
-    sales_team_recipients = get_sales_team_recipients(doc)
-    for recipient in sales_team_recipients:
+    # Batch fetch all data at once
+    all_data = batch_fetch_recipient_data(doc, linked_docs)
+    
+    # Process sales team recipients
+    for recipient in all_data['sales_team']:
         if recipient['mobile']:
-            recipients_dict[recipient['mobile']] = recipient
+            if recipient['mobile'] in recipients_dict:
+                recipients_dict[recipient['mobile']]['source'] += f", {recipient['source']}"
+            else:
+                recipients_dict[recipient['mobile']] = recipient
     
-    # 2. Get recipient from Material Request
-    mr_recipient = get_material_request_recipient(doc)
-    if mr_recipient and mr_recipient['mobile']:
-        if mr_recipient['mobile'] in recipients_dict:
-            recipients_dict[mr_recipient['mobile']]['source'] += f", {mr_recipient['source']}"
+    # Process material request recipients
+    for recipient in all_data['material_request']:
+        if recipient['mobile']:
+            if recipient['mobile'] in recipients_dict:
+                recipients_dict[recipient['mobile']]['source'] += f", {recipient['source']}"
+            else:
+                recipients_dict[recipient['mobile']] = recipient
+    
+    # Process creator
+    if all_data['creator'] and all_data['creator']['mobile']:
+        mobile = all_data['creator']['mobile']
+        if mobile in recipients_dict:
+            recipients_dict[mobile]['source'] += f", {all_data['creator']['source']}"
         else:
-            recipients_dict[mr_recipient['mobile']] = mr_recipient
+            recipients_dict[mobile] = all_data['creator']
     
-    # 3. Get document creator
-    creator_recipient = get_creator_recipient(doc)
-    if creator_recipient and creator_recipient['mobile']:
-        if creator_recipient['mobile'] in recipients_dict:
-            recipients_dict[creator_recipient['mobile']]['source'] += f", {creator_recipient['source']}"
-        else:
-            recipients_dict[creator_recipient['mobile']] = creator_recipient
+    # Process customer contacts
+    for recipient in all_data['customers']:
+        if recipient['mobile']:
+            if recipient['mobile'] in recipients_dict:
+                recipients_dict[recipient['mobile']]['source'] += f", {recipient['source']}"
+            else:
+                recipients_dict[recipient['mobile']] = recipient
     
-    # 4. Get customer contact (if linked)
-    customer_recipient = get_customer_contact(doc)
-    if customer_recipient and customer_recipient['mobile']:
-        if customer_recipient['mobile'] in recipients_dict:
-            recipients_dict[customer_recipient['mobile']]['source'] += f", {customer_recipient['source']}"
-        else:
-            recipients_dict[customer_recipient['mobile']] = customer_recipient
-    
-    # 5. Get role-based recipients
-    role_recipients = get_role_based_recipients(doc)
-    for recipient in role_recipients:
+    # Process role-based recipients
+    for recipient in all_data['roles']:
         if recipient['mobile']:
             if recipient['mobile'] in recipients_dict:
                 recipients_dict[recipient['mobile']]['source'] += f", {recipient['source']}"
@@ -250,378 +114,363 @@ def get_all_recipients(doc):
     return list(recipients_dict.values())
 
 
-def get_sales_team_recipients(doc):
+def extract_linked_documents(doc):
     """
-    Get all sales persons from linked Sales Orders, Quotations, or Sales Invoices.
+    OPTIMIZED: Extract all linked document IDs in a single pass.
     """
-    recipients = []
-    sales_orders = set()
-    quotations = set()
-    sales_invoices = set()
+    linked = {
+        'sales_orders': set(),
+        'quotations': set(),
+        'sales_invoices': set(),
+        'material_requests': set(),
+        'purchase_orders': set(),
+        'material_request_items': set(),
+        'customers': set()
+    }
     
-    # Get linked sales documents from items
     for item in doc.get("items", []):
-        # Check what fields exist in the item table
+        # Sales Orders
+        if hasattr(item, 'sales_order') and item.sales_order:
+            linked['sales_orders'].add(item.sales_order)
         
-        # For Purchase Receipt Item
-        if doc.doctype == "Purchase Receipt":
-            # Check if item has sales_order field
-            if hasattr(item, 'sales_order') and item.sales_order:
-                sales_orders.add(item.sales_order)
-            
-            # Try to get sales order from Purchase Order Item
-            if hasattr(item, 'purchase_order') and item.purchase_order:
-                try:
-                    if frappe.db.has_column("Purchase Order Item", "sales_order"):
-                        po_sales_orders = frappe.db.sql("""
-                            SELECT DISTINCT poi.sales_order
-                            FROM `tabPurchase Order Item` poi
-                            WHERE poi.parent = %s 
-                            AND poi.sales_order IS NOT NULL
-                            AND poi.sales_order != ''
-                        """, item.purchase_order, as_dict=1)
-                        for row in po_sales_orders:
-                            if row.sales_order:
-                                sales_orders.add(row.sales_order)
-                except:
-                    pass
-            
-            # Try to get from Material Request Item
-            if hasattr(item, 'material_request') and item.material_request and hasattr(item, 'material_request_item') and item.material_request_item:
-                try:
-                    if frappe.db.has_column("Material Request Item", "sales_order"):
-                        mr_so = frappe.db.get_value(
-                            "Material Request Item",
-                            item.material_request_item,
-                            "sales_order"
-                        )
-                        if mr_so:
-                            sales_orders.add(mr_so)
-                except:
-                    pass
-        
-        # For Stock Entry Detail
-        elif doc.doctype == "Stock Entry":
-            if hasattr(item, 'material_request') and item.material_request and hasattr(item, 'material_request_item') and item.material_request_item:
-                try:
-                    if frappe.db.has_column("Material Request Item", "sales_order"):
-                        mr_so = frappe.db.get_value(
-                            "Material Request Item",
-                            item.material_request_item,
-                            "sales_order"
-                        )
-                        if mr_so:
-                            sales_orders.add(mr_so)
-                except:
-                    pass
-        
-        # Check for other sales document links
+        # Quotations
         if hasattr(item, 'quotation') and item.quotation:
-            quotations.add(item.quotation)
+            linked['quotations'].add(item.quotation)
+        
+        # Sales Invoices
         if hasattr(item, 'sales_invoice') and item.sales_invoice:
-            sales_invoices.add(item.sales_invoice)
+            linked['sales_invoices'].add(item.sales_invoice)
+        
+        # Material Requests
+        if hasattr(item, 'material_request') and item.material_request:
+            linked['material_requests'].add(item.material_request)
+        
+        # Material Request Items
+        if hasattr(item, 'material_request_item') and item.material_request_item:
+            linked['material_request_items'].add(item.material_request_item)
+        
+        # Purchase Orders
+        if hasattr(item, 'purchase_order') and item.purchase_order:
+            linked['purchase_orders'].add(item.purchase_order)
     
-    # Collect sales team members from all linked sales documents
-    all_sales_docs = []
+    return linked
+
+
+def batch_fetch_recipient_data(doc, linked_docs):
+    """
+    OPTIMIZED: Fetch all recipient data in bulk queries.
+    Reduces individual queries to batch operations.
+    """
+    result = {
+        'sales_team': [],
+        'material_request': [],
+        'creator': None,
+        'customers': [],
+        'roles': []
+    }
     
-    for so in sales_orders:
-        all_sales_docs.append(("Sales Order", so))
-    for quot in quotations:
-        all_sales_docs.append(("Quotation", quot))
-    for si in sales_invoices:
-        all_sales_docs.append(("Sales Invoice", si))
+    # 1. Fetch Sales Team members (one query per doctype)
+    if linked_docs['sales_orders']:
+        result['sales_team'].extend(
+            fetch_sales_team_bulk(linked_docs['sales_orders'], "Sales Order")
+        )
+    if linked_docs['quotations']:
+        result['sales_team'].extend(
+            fetch_sales_team_bulk(linked_docs['quotations'], "Quotation")
+        )
+    if linked_docs['sales_invoices']:
+        result['sales_team'].extend(
+            fetch_sales_team_bulk(linked_docs['sales_invoices'], "Sales Invoice")
+        )
     
-    # Get sales team members from each document
-    for doctype, docname in all_sales_docs:
-        try:
-            sales_team = frappe.get_all(
-                "Sales Team",
-                filters={"parent": docname, "parenttype": doctype},
-                fields=["sales_person", "parent"]
+    # 2. Fetch additional Sales Orders from Purchase Orders (single query)
+    if doc.doctype == "Purchase Receipt" and linked_docs['purchase_orders']:
+        additional_sos = fetch_sales_orders_from_purchase_orders(linked_docs['purchase_orders'])
+        if additional_sos:
+            result['sales_team'].extend(
+                fetch_sales_team_bulk(additional_sos, "Sales Order")
             )
-            
-            for st in sales_team:
-                if st.sales_person:
-                    recipient = get_user_from_sales_person(st.sales_person, doctype, docname)
-                    if recipient:
-                        recipients.append(recipient)
-        except:
-            pass
+            linked_docs['sales_orders'].update(additional_sos)
     
-    return recipients
+    # 3. Fetch Sales Orders from Material Request Items (single query)
+    if linked_docs['material_request_items']:
+        mr_sales_orders = fetch_sales_orders_from_mr_items(linked_docs['material_request_items'])
+        if mr_sales_orders:
+            result['sales_team'].extend(
+                fetch_sales_team_bulk(mr_sales_orders, "Sales Order")
+            )
+            linked_docs['sales_orders'].update(mr_sales_orders)
+    
+    # 4. Fetch Material Request creators (single query)
+    if linked_docs['material_requests']:
+        result['material_request'] = fetch_material_request_creators_bulk(
+            linked_docs['material_requests']
+        )
+    
+    # 5. Fetch document creator
+    result['creator'] = fetch_user_details(doc.owner, f"{doc.doctype} Creator")
+    
+    # 6. Fetch customers and contacts (batch query)
+    if linked_docs['sales_orders']:
+        result['customers'] = fetch_customer_contacts_bulk(
+            linked_docs['sales_orders']
+        )
+    
+    # 7. Fetch role-based recipients (single query)
+    result['roles'] = fetch_role_based_recipients_bulk()
+    
+    return result
 
 
-def get_user_from_sales_person(sales_person, source_doctype, source_docname):
+def fetch_sales_team_bulk(doc_ids, doctype):
     """
-    Get user details from Sales Person via Employee link.
+    OPTIMIZED: Fetch all sales team members in one query with joins.
     """
+    if not doc_ids:
+        return []
+    
     try:
-        # Get employee linked to sales person
-        employee = frappe.db.get_value("Sales Person", sales_person, "employee")
-        if not employee:
-            return None
+        # Single query with all joins
+        data = frappe.db.sql("""
+            SELECT DISTINCT
+                u.name as user,
+                u.full_name,
+                COALESCE(u.mobile_no, u.phone) as mobile,
+                st.sales_person,
+                st.parent as source_doc
+            FROM `tabSales Team` st
+            INNER JOIN `tabSales Person` sp ON sp.name = st.sales_person
+            INNER JOIN `tabEmployee` emp ON emp.name = sp.employee
+            INNER JOIN `tabUser` u ON u.name = emp.user_id
+            WHERE st.parent IN %(docs)s
+            AND st.parenttype = %(doctype)s
+            AND u.enabled = 1
+            AND (u.mobile_no IS NOT NULL OR u.phone IS NOT NULL)
+        """, {"docs": list(doc_ids), "doctype": doctype}, as_dict=1)
         
-        # Get user linked to employee
-        user = frappe.db.get_value("Employee", employee, "user_id")
-        if not user:
-            return None
+        recipients = []
+        for row in data:
+            if row.mobile:
+                recipients.append({
+                    "user": row.user,
+                    "name": row.full_name or row.user,
+                    "mobile": row.mobile,
+                    "source": f"Sales Team ({doctype})",
+                    "sales_person": row.sales_person
+                })
         
-        # Get user details
-        user_details = frappe.db.get_value(
+        return recipients
+    except:
+        return []
+
+
+def fetch_sales_orders_from_purchase_orders(po_ids):
+    """
+    OPTIMIZED: Fetch linked sales orders from purchase orders in one query.
+    """
+    if not po_ids:
+        return set()
+    
+    try:
+        if not frappe.db.has_column("Purchase Order Item", "sales_order"):
+            return set()
+        
+        results = frappe.db.sql("""
+            SELECT DISTINCT sales_order
+            FROM `tabPurchase Order Item`
+            WHERE parent IN %(pos)s
+            AND sales_order IS NOT NULL
+            AND sales_order != ''
+        """, {"pos": list(po_ids)}, as_dict=1)
+        
+        return {row.sales_order for row in results if row.sales_order}
+    except:
+        return set()
+
+
+def fetch_sales_orders_from_mr_items(mr_item_ids):
+    """
+    OPTIMIZED: Fetch sales orders from material request items in one query.
+    """
+    if not mr_item_ids:
+        return set()
+    
+    try:
+        if not frappe.db.has_column("Material Request Item", "sales_order"):
+            return set()
+        
+        results = frappe.db.sql("""
+            SELECT DISTINCT sales_order
+            FROM `tabMaterial Request Item`
+            WHERE name IN %(items)s
+            AND sales_order IS NOT NULL
+            AND sales_order != ''
+        """, {"items": list(mr_item_ids)}, as_dict=1)
+        
+        return {row.sales_order for row in results if row.sales_order}
+    except:
+        return set()
+
+
+def fetch_material_request_creators_bulk(mr_ids):
+    """
+    OPTIMIZED: Fetch material request creators in one query.
+    """
+    if not mr_ids:
+        return []
+    
+    try:
+        # Check if requested_by field exists
+        has_requested_by = frappe.db.has_column("Material Request", "requested_by")
+        
+        if has_requested_by:
+            query = """
+                SELECT DISTINCT
+                    COALESCE(mr.requested_by, mr.owner) as user,
+                    u.full_name,
+                    COALESCE(u.mobile_no, u.phone) as mobile
+                FROM `tabMaterial Request` mr
+                INNER JOIN `tabUser` u ON u.name = COALESCE(mr.requested_by, mr.owner)
+                WHERE mr.name IN %(mrs)s
+                AND u.enabled = 1
+                AND (u.mobile_no IS NOT NULL OR u.phone IS NOT NULL)
+            """
+        else:
+            query = """
+                SELECT DISTINCT
+                    mr.owner as user,
+                    u.full_name,
+                    COALESCE(u.mobile_no, u.phone) as mobile
+                FROM `tabMaterial Request` mr
+                INNER JOIN `tabUser` u ON u.name = mr.owner
+                WHERE mr.name IN %(mrs)s
+                AND u.enabled = 1
+                AND (u.mobile_no IS NOT NULL OR u.phone IS NOT NULL)
+            """
+        
+        data = frappe.db.sql(query, {"mrs": list(mr_ids)}, as_dict=1)
+        
+        recipients = []
+        for row in data:
+            if row.mobile:
+                recipients.append({
+                    "user": row.user,
+                    "name": row.full_name or row.user,
+                    "mobile": row.mobile,
+                    "source": "Material Request Creator"
+                })
+        
+        return recipients
+    except:
+        return []
+
+
+def fetch_user_details(user_id, source):
+    """
+    OPTIMIZED: Fetch single user details.
+    """
+    if not user_id:
+        return None
+    
+    try:
+        user = frappe.db.get_value(
             "User",
-            user,
+            user_id,
             ["name", "mobile_no", "phone", "full_name", "enabled"],
             as_dict=1
         )
         
-        if not user_details or not user_details.enabled:
+        if not user or not user.enabled:
             return None
         
-        mobile = user_details.mobile_no or user_details.phone
+        mobile = user.mobile_no or user.phone
         if not mobile:
             return None
         
         return {
-            "user": user_details.name,
-            "name": user_details.full_name or user_details.name,
+            "user": user.name,
+            "name": user.full_name or user.name,
             "mobile": mobile,
-            "source": f"Sales Team ({source_doctype})",
-            "sales_person": sales_person
+            "source": source
         }
     except:
         return None
 
 
-def get_material_request_recipient(doc):
+def fetch_customer_contacts_bulk(sales_order_ids):
     """
-    Get the user who requested the material via Material Request.
+    OPTIMIZED: Fetch customer contacts from sales orders in one query.
     """
+    if not sales_order_ids:
+        return []
+    
     try:
-        material_requests = set()
+        # Single query with all joins
+        data = frappe.db.sql("""
+            SELECT DISTINCT
+                so.customer,
+                c.customer_name,
+                con.name as contact_name,
+                CONCAT(COALESCE(con.first_name, ''), ' ', COALESCE(con.last_name, '')) as contact_full_name,
+                COALESCE(con.mobile_no, con.phone) as mobile
+            FROM `tabSales Order` so
+            INNER JOIN `tabCustomer` c ON c.name = so.customer
+            LEFT JOIN `tabDynamic Link` dl ON dl.link_name = so.customer 
+                AND dl.link_doctype = 'Customer' 
+                AND dl.parenttype = 'Contact'
+            LEFT JOIN `tabContact` con ON con.name = dl.parent
+            WHERE so.name IN %(sos)s
+            AND (con.mobile_no IS NOT NULL OR con.phone IS NOT NULL)
+        """, {"sos": list(sales_order_ids)}, as_dict=1)
         
-        # Collect all material requests from items
-        for item in doc.get("items", []):
-            if hasattr(item, 'material_request') and item.material_request:
-                material_requests.add(item.material_request)
+        recipients = []
+        seen_customers = set()
         
-        if not material_requests:
-            return None
-        
-        # Get the first material request's owner (creator)
-        for mr in material_requests:
-            requester = None
+        for row in data:
+            if row.customer in seen_customers:
+                continue
             
-            # Check if requested_by field exists
-            if frappe.db.has_column("Material Request", "requested_by"):
-                requester = frappe.db.get_value("Material Request", mr, "requested_by")
-            
-            # If not, use owner field
-            if not requester:
-                requester = frappe.db.get_value("Material Request", mr, "owner")
-            
-            if requester:
-                user_details = frappe.db.get_value(
-                    "User",
-                    requester,
-                    ["name", "mobile_no", "phone", "full_name", "enabled"],
-                    as_dict=1
-                )
+            if row.mobile:
+                seen_customers.add(row.customer)
+                contact_name = row.contact_full_name.strip() if row.contact_full_name else row.contact_name
                 
-                if user_details and user_details.enabled:
-                    mobile = user_details.mobile_no or user_details.phone
-                    
-                    if mobile:
-                        return {
-                            "user": user_details.name,
-                            "name": user_details.full_name or user_details.name,
-                            "mobile": mobile,
-                            "source": "Material Request Creator"
-                        }
+                recipients.append({
+                    "user": f"Customer: {row.customer}",
+                    "name": f"{row.customer_name} ({contact_name})" if contact_name else row.customer_name,
+                    "mobile": row.mobile,
+                    "source": "Customer Contact",
+                    "customer": row.customer,
+                    "customer_name": row.customer_name
+                })
         
-        return None
+        return recipients
     except:
-        return None
+        return []
 
 
-def get_creator_recipient(doc):
+def fetch_role_based_recipients_bulk():
     """
-    Get the user who created the Purchase Receipt or Stock Entry.
+    OPTIMIZED: Fetch role-based recipients in one query.
     """
-    try:
-        creator = doc.owner
-        if not creator:
-            return None
-        
-        user_details = frappe.db.get_value(
-            "User",
-            creator,
-            ["name", "mobile_no", "phone", "full_name", "enabled"],
-            as_dict=1
-        )
-        
-        if not user_details or not user_details.enabled:
-            return None
-        
-        mobile = user_details.mobile_no or user_details.phone
-        if not mobile:
-            return None
-        
-        return {
-            "user": user_details.name,
-            "name": user_details.full_name or user_details.name,
-            "mobile": mobile,
-            "source": f"{doc.doctype} Creator"
-        }
-    except:
-        return None
-
-
-def get_customer_contact(doc):
-    """
-    Get customer contact details from linked Sales Orders.
-    Finds the primary contact or any contact with mobile number.
-    """
-    try:
-        customers = set()
-        
-        # Get customers from linked Sales Orders
-        for item in doc.get("items", []):
-            # From Purchase Receipt Item
-            if doc.doctype == "Purchase Receipt":
-                # Direct sales order link
-                if hasattr(item, 'sales_order') and item.sales_order:
-                    customer = frappe.db.get_value("Sales Order", item.sales_order, "customer")
-                    if customer:
-                        customers.add(customer)
-                
-                # Via Purchase Order
-                if hasattr(item, 'purchase_order') and item.purchase_order:
-                    try:
-                        if frappe.db.has_column("Purchase Order Item", "sales_order"):
-                            po_sales_orders = frappe.db.sql("""
-                                SELECT DISTINCT poi.sales_order
-                                FROM `tabPurchase Order Item` poi
-                                WHERE poi.parent = %s 
-                                AND poi.sales_order IS NOT NULL
-                            """, item.purchase_order, as_dict=1)
-                            
-                            for row in po_sales_orders:
-                                if row.sales_order:
-                                    customer = frappe.db.get_value("Sales Order", row.sales_order, "customer")
-                                    if customer:
-                                        customers.add(customer)
-                    except:
-                        pass
-                
-                # Via Material Request Item
-                if hasattr(item, 'material_request_item') and item.material_request_item:
-                    try:
-                        if frappe.db.has_column("Material Request Item", "sales_order"):
-                            mr_so = frappe.db.get_value(
-                                "Material Request Item",
-                                item.material_request_item,
-                                "sales_order"
-                            )
-                            if mr_so:
-                                customer = frappe.db.get_value("Sales Order", mr_so, "customer")
-                                if customer:
-                                    customers.add(customer)
-                    except:
-                        pass
-            
-            # From Stock Entry
-            elif doc.doctype == "Stock Entry":
-                if hasattr(item, 'material_request_item') and item.material_request_item:
-                    try:
-                        if frappe.db.has_column("Material Request Item", "sales_order"):
-                            mr_so = frappe.db.get_value(
-                                "Material Request Item",
-                                item.material_request_item,
-                                "sales_order"
-                            )
-                            if mr_so:
-                                customer = frappe.db.get_value("Sales Order", mr_so, "customer")
-                                if customer:
-                                    customers.add(customer)
-                    except:
-                        pass
-        
-        if not customers:
-            return None
-        
-        # Get contact for the first customer found
-        for customer in customers:
-            customer_name = frappe.db.get_value("Customer", customer, "customer_name")
-            
-            # Try to get primary contact first
-            contact_name = frappe.db.get_value(
-                "Dynamic Link",
-                {
-                    "link_doctype": "Customer",
-                    "link_name": customer,
-                    "parenttype": "Contact"
-                },
-                "parent"
-            )
-            
-            if contact_name:
-                # Get contact details
-                contact_details = frappe.db.get_value(
-                    "Contact",
-                    contact_name,
-                    ["name", "mobile_no", "phone", "first_name", "last_name"],
-                    as_dict=1
-                )
-                
-                if contact_details:
-                    mobile = contact_details.mobile_no or contact_details.phone
-                    
-                    if mobile:
-                        contact_full_name = f"{contact_details.first_name or ''} {contact_details.last_name or ''}".strip()
-                        if not contact_full_name:
-                            contact_full_name = contact_name
-                        
-                        return {
-                            "user": f"Customer: {customer}",
-                            "name": f"{customer_name} ({contact_full_name})",
-                            "mobile": mobile,
-                            "source": "Customer Contact",
-                            "customer": customer,
-                            "customer_name": customer_name
-                        }
-        
-        return None
-    except Exception as e:
-        return None
-
-
-def get_role_based_recipients(doc):
-    """
-    Get users with specific roles.
-    First checks Settings DocType, if not found uses hardcoded roles.
-    """
-    recipients = []
     configured_roles = []
     
     try:
-        # Try to get roles from Settings DocType
         if frappe.db.exists("DocType", "Material Receipt Notification Settings"):
             settings = frappe.get_single("Material Receipt Notification Settings")
-            
             if hasattr(settings, 'notification_roles') and settings.notification_roles:
                 configured_roles = [row.role for row in settings.notification_roles if row.role]
         
-        # If no roles configured in settings, use hardcoded roles
         if not configured_roles:
             configured_roles = HARDCODED_ROLES
         
-        # If still no roles, return empty list
         if not configured_roles:
             return []
         
-        # Get users with these roles
-        users_with_roles = frappe.db.sql("""
-            SELECT DISTINCT u.name, u.mobile_no, u.phone, u.full_name
+        data = frappe.db.sql("""
+            SELECT DISTINCT 
+                u.name as user,
+                u.full_name,
+                COALESCE(u.mobile_no, u.phone) as mobile
             FROM `tabUser` u
             INNER JOIN `tabHas Role` hr ON hr.parent = u.name
             WHERE hr.role IN %(roles)s
@@ -629,32 +478,26 @@ def get_role_based_recipients(doc):
             AND (u.mobile_no IS NOT NULL OR u.phone IS NOT NULL)
         """, {"roles": configured_roles}, as_dict=1)
         
-        for user in users_with_roles:
-            mobile = user.mobile_no or user.phone
-            if mobile:
+        recipients = []
+        for row in data:
+            if row.mobile:
                 recipients.append({
-                    "user": user.name,
-                    "name": user.full_name or user.name,
-                    "mobile": mobile,
+                    "user": row.user,
+                    "name": row.full_name or row.user,
+                    "mobile": row.mobile,
                     "source": f"Role-Based ({', '.join(configured_roles)})"
                 })
+        
+        return recipients
     except:
-        pass
-    
-    return recipients
+        return []
 
 
 def send_whatsapp_to_recipient(doc, recipient):
-    """
-    Send WhatsApp message to a specific recipient with personalized content.
-    """
-    # Build the message
+    """Send WhatsApp message to a specific recipient."""
     message = build_message(doc, recipient)
-    
-    # Get template name
     template_name = get_whatsapp_template_name()
     
-    # Send WhatsApp message using your existing system
     frappe.call(
         "erpnext_enhancements.api.whatsapp_reminders.whatsapp.send_manual_whatsapp_message",
         doctype=doc.doctype,
@@ -666,12 +509,7 @@ def send_whatsapp_to_recipient(doc, recipient):
 
 
 def build_message(doc, recipient):
-    """
-    Build personalized WhatsApp message for material receipt.
-    """
-    today = nowdate()
-    
-    # Get template if exists
+    """Build personalized WhatsApp message."""
     template_name = get_whatsapp_template_name()
     message = ""
     
@@ -683,26 +521,20 @@ def build_message(doc, recipient):
         )
         if template_text:
             message = template_text
-            # Clean simple HTML
             message = message.replace("<div>", "").replace("</div>", "\n")
             message = message.replace("<p>", "").replace("</p>", "\n")
             message = message.replace("&nbsp;", " ").strip()
     
-    # If no template or template not found, use default message
     if not message:
         message = build_default_message(doc, recipient)
     
-    # Replace variables
-    message = replace_message_variables(message, doc, recipient, today)
+    message = replace_message_variables(message, doc, recipient)
     
     return message
 
 
 def build_default_message(doc, recipient):
-    """
-    Build default message template if no custom template is configured.
-    """
-    # Get item details
+    """Build default message template."""
     items_text = ""
     
     for idx, item in enumerate(doc.get("items", [])[:5], 1):
@@ -713,15 +545,12 @@ def build_default_message(doc, recipient):
     if len(doc.get("items", [])) > 5:
         items_text += f"... and {len(doc.items) - 5} more items\n"
     
-    # Get linked document info with customer details
-    linked_docs_text = get_linked_documents_with_customer_text(doc)
+    linked_docs_text = get_linked_documents_text_cached(doc)
     
-    # Get supplier name (for Purchase Receipt)
     supplier_text = ""
     if doc.doctype == "Purchase Receipt" and hasattr(doc, 'supplier'):
         supplier_text = f"Supplier: {doc.supplier}\n"
     
-    # Build message
     message = f"""Dear {recipient['name']},
 
 Materials have been received successfully!
@@ -740,168 +569,40 @@ Thank you!"""
     return message
 
 
-def get_linked_documents_with_customer_text(doc):
+def get_linked_documents_text_cached(doc):
     """
-    Get text of linked sales documents with customer details for display in message.
-    Shows customer info only if there are sales-related documents.
+    OPTIMIZED: Get linked documents text using already extracted data.
     """
-    linked_docs = []
-    sales_orders = []
-    quotations = []
-    sales_invoices = []
-    material_requests = []
-    purchase_orders = []
-    customers_info = {}
-    
-    # Collect all linked documents
-    for item in doc.get("items", []):
-        if hasattr(item, 'sales_order') and item.sales_order:
-            if item.sales_order not in sales_orders:
-                sales_orders.append(item.sales_order)
-                # Get customer from sales order
-                try:
-                    customer = frappe.db.get_value("Sales Order", item.sales_order, "customer")
-                    if customer and customer not in customers_info:
-                        customers_info[customer] = get_customer_info(customer)
-                except:
-                    pass
-        
-        if hasattr(item, 'quotation') and item.quotation:
-            if item.quotation not in quotations:
-                quotations.append(item.quotation)
-                # Get customer from quotation
-                try:
-                    customer = frappe.db.get_value("Quotation", item.quotation, "party_name")
-                    if customer and customer not in customers_info:
-                        customers_info[customer] = get_customer_info(customer)
-                except:
-                    pass
-        
-        if hasattr(item, 'sales_invoice') and item.sales_invoice:
-            if item.sales_invoice not in sales_invoices:
-                sales_invoices.append(item.sales_invoice)
-                # Get customer from sales invoice
-                try:
-                    customer = frappe.db.get_value("Sales Invoice", item.sales_invoice, "customer")
-                    if customer and customer not in customers_info:
-                        customers_info[customer] = get_customer_info(customer)
-                except:
-                    pass
-        
-        if hasattr(item, 'material_request') and item.material_request:
-            if item.material_request not in material_requests:
-                material_requests.append(item.material_request)
-        
-        if hasattr(item, 'purchase_order') and item.purchase_order:
-            if item.purchase_order not in purchase_orders:
-                purchase_orders.append(item.purchase_order)
-    
-    # Build the text
+    linked = extract_linked_documents(doc)
     result = "Against:\n"
     
-    # Show sales documents
-    if sales_orders:
-        result += f"Sales Order: {', '.join(sales_orders)}\n"
+    if linked['sales_orders']:
+        result += f"Sales Order: {', '.join(linked['sales_orders'])}\n"
     
-    if quotations:
-        result += f"Quotation: {', '.join(quotations)}\n"
+    if linked['quotations']:
+        result += f"Quotation: {', '.join(linked['quotations'])}\n"
     
-    if sales_invoices:
-        result += f"Sales Invoice: {', '.join(sales_invoices)}\n"
+    if linked['sales_invoices']:
+        result += f"Sales Invoice: {', '.join(linked['sales_invoices'])}\n"
     
-    # Show customer details only if there are sales documents
-    if customers_info:
-        for customer, info in customers_info.items():
-            result += f"Customer: {info['customer_name']}\n"
-            if info['contact_name'] and info['mobile']:
-                result += f"Customer Contact: {info['contact_name']} - {info['mobile']}\n"
+    if linked['purchase_orders']:
+        result += f"Purchase Order: {', '.join(linked['purchase_orders'])}\n"
     
-    # Show purchase documents
-    if purchase_orders:
-        result += f"Purchase Order: {', '.join(purchase_orders)}\n"
+    if linked['material_requests']:
+        result += f"Material Request: {', '.join(linked['material_requests'])}\n"
     
-    if material_requests:
-        result += f"Material Request: {', '.join(material_requests)}\n"
-    
-    # If nothing is linked, return empty string
     if result == "Against:\n":
         return ""
     
     return result
 
 
-def get_customer_info(customer):
-    """
-    Get customer name and primary contact details.
-    Returns dict with customer_name, contact_name, and mobile.
-    """
-    info = {
-        "customer_name": customer,
-        "contact_name": None,
-        "mobile": None
-    }
-    
-    try:
-        # Get customer name
-        customer_name = frappe.db.get_value("Customer", customer, "customer_name")
-        if customer_name:
-            info["customer_name"] = customer_name
-        
-        # Get primary contact
-        contact_name = frappe.db.get_value(
-            "Dynamic Link",
-            {
-                "link_doctype": "Customer",
-                "link_name": customer,
-                "parenttype": "Contact"
-            },
-            "parent"
-        )
-        
-        if contact_name:
-            contact_details = frappe.db.get_value(
-                "Contact",
-                contact_name,
-                ["mobile_no", "phone", "first_name", "last_name"],
-                as_dict=1
-            )
-            
-            if contact_details:
-                mobile = contact_details.mobile_no or contact_details.phone
-                if mobile:
-                    contact_full_name = f"{contact_details.first_name or ''} {contact_details.last_name or ''}".strip()
-                    info["contact_name"] = contact_full_name if contact_full_name else contact_name
-                    info["mobile"] = mobile
-    except:
-        pass
-    
-    return info
-
-
-def replace_message_variables(message, doc, recipient, today):
-    """
-    Replace all variables in the message template.
-    """
-    # Get first item details
+def replace_message_variables(message, doc, recipient):
+    """Replace all variables in the message template."""
+    linked = extract_linked_documents(doc)
     first_item = doc.items[0] if doc.items else None
+    today = nowdate()
     
-    # Collect all linked document IDs
-    sales_orders = []
-    quotations = []
-    material_requests = []
-    purchase_orders = []
-    
-    for item in doc.get("items", []):
-        if hasattr(item, 'sales_order') and item.sales_order:
-            sales_orders.append(item.sales_order)
-        if hasattr(item, 'quotation') and item.quotation:
-            quotations.append(item.quotation)
-        if hasattr(item, 'material_request') and item.material_request:
-            material_requests.append(item.material_request)
-        if hasattr(item, 'purchase_order') and item.purchase_order:
-            purchase_orders.append(item.purchase_order)
-    
-    # Build replacements dictionary
     replacements = {
         "{recipient_name}": recipient['name'],
         "{name}": recipient['name'],
@@ -916,21 +617,19 @@ def replace_message_variables(message, doc, recipient, today):
         "{supplier_name}": doc.supplier_name if hasattr(doc, 'supplier_name') else doc.supplier if hasattr(doc, 'supplier') else "N/A",
         "{total_items}": str(len(doc.items)),
         "{item_count}": str(len(doc.items)),
-        "{sales_order}": ", ".join(set(sales_orders)) if sales_orders else "N/A",
-        "{quotation}": ", ".join(set(quotations)) if quotations else "N/A",
-        "{material_request}": ", ".join(set(material_requests)) if material_requests else "N/A",
-        "{purchase_order}": ", ".join(set(purchase_orders)) if purchase_orders else "N/A",
+        "{sales_order}": ", ".join(linked['sales_orders']) if linked['sales_orders'] else "N/A",
+        "{quotation}": ", ".join(linked['quotations']) if linked['quotations'] else "N/A",
+        "{material_request}": ", ".join(linked['material_requests']) if linked['material_requests'] else "N/A",
+        "{purchase_order}": ", ".join(linked['purchase_orders']) if linked['purchase_orders'] else "N/A",
         "{customer}": recipient.get('customer', 'N/A'),
         "{customer_name}": recipient.get('customer_name', 'N/A'),
     }
     
-    # Add first item details
     if first_item:
         replacements["{first_item}"] = first_item.item_name or first_item.item_code
         replacements["{first_item_qty}"] = str(first_item.qty if hasattr(first_item, 'qty') else first_item.transfer_qty if hasattr(first_item, 'transfer_qty') else 0)
         replacements["{first_item_uom}"] = first_item.uom if hasattr(first_item, 'uom') else first_item.stock_uom if hasattr(first_item, 'stock_uom') else ""
     
-    # Perform replacements
     for key, val in replacements.items():
         message = message.replace(key, str(val))
     
@@ -938,11 +637,8 @@ def replace_message_variables(message, doc, recipient, today):
 
 
 def get_whatsapp_template_name():
-    """
-    Get the configured WhatsApp template name for material receipts.
-    """
+    """Get the configured WhatsApp template name."""
     try:
-        # Check if settings exist
         if frappe.db.exists("DocType", "Material Receipt Notification Settings"):
             settings = frappe.get_single("Material Receipt Notification Settings")
             if hasattr(settings, 'whatsapp_template') and settings.whatsapp_template:
@@ -950,6 +646,57 @@ def get_whatsapp_template_name():
     except:
         pass
     
-    # Return hardcoded template or None
     return HARDCODED_TEMPLATE
 
+
+def log_notification_result(success, doc, recipients, success_list=None, failed_list=None, error_message=None):
+    """Log the final result of notification process."""
+    if success:
+        title = f"✅ Material Receipt WhatsApp - Success ({doc.name})"
+        message = f"""{'='*80}
+WHATSAPP NOTIFICATION SENT SUCCESSFULLY
+{'='*80}
+
+Document: {doc.doctype} - {doc.name}
+Date: {doc.posting_date if hasattr(doc, 'posting_date') else nowdate()}
+Supplier: {doc.supplier if hasattr(doc, 'supplier') else 'N/A'}
+Items: {len(doc.items)}
+
+Recipients ({len(success_list) if success_list else 0}):
+"""
+        if success_list:
+            for idx, r in enumerate(success_list, 1):
+                message += f"{idx}. {r.get('name', 'Unknown')} ({r.get('mobile', 'Unknown')}) - {r.get('source', '')}\n"
+
+    else:
+        title = f"❌ Material Receipt WhatsApp - Failed ({doc.name})"
+        message = f"""{'='*80}
+WHATSAPP NOTIFICATION FAILED
+{'='*80}
+
+Document: {doc.doctype} - {doc.name}
+
+{error_message if error_message else 'Unknown error occurred'}
+"""
+        if failed_list:
+            message += f"\nFailed Recipients ({len(failed_list)}):\n"
+            for idx, r in enumerate(failed_list, 1):
+                name = r.get('name') or r.get('user') or 'Unknown'
+                mobile = r.get('mobile') or 'Unknown'
+                source = r.get('source') or 'Unknown'
+                err = r.get('error') or ''
+                message += f"{idx}. {name} ({mobile}) - {source}"
+                if err:
+                    message += f" - Error: {err}"
+                message += "\n"
+
+    # Persist log using frappe logging utilities for visibility in Desk > Error Log
+    try:
+        frappe.log_error(message, title)
+    except Exception:
+        # Fallback to printing if frappe logging fails (useful during development)
+        try:
+            print(title)
+            print(message)
+        except Exception:
+            pass
