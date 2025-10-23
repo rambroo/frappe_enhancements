@@ -43,18 +43,13 @@ doc_events = {
         "on_cancel": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_cancel",
         "after_insert": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_creation",
         "on_update": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_update"
-    },
-    "Sales Invoice": {
-        "on_submit": "erpnext_enhancements.api.sales_invoice_s3.on_submit"
-    },
+    },    
     "Purchase Receipt": {
         "on_submit": "erpnext_enhancements.custom_functions.Materials_received_whatsapp_message.send_material_receipt_notifications"
     },
     "Stock Entry": {
         "on_submit": "erpnext_enhancements.custom_functions.Materials_received_whatsapp_message.send_material_receipt_notifications"
-    },
-
-
+    }
 }
 
 
