@@ -18,10 +18,14 @@ def custom_item_search(doctype, txt, searchfield, start, page_len, filters):
     1. Exact custom_sku_code match (highest priority)
     2. Exact item_code match
     3. Exact item_name match
-    4. Word boundary match in custom_sku_code (NEW - higher priority for complete words)
-    5. Partial item_code match
-    6. Partial item_name match
-    7. Partial custom_sku_code match (lowest priority)
+    4. Word boundary match in custom_sku_code (complete words)
+    5. Space-insensitive item_name match (e.g., "rohanrambhiya" matches "rohan ram bhiya")
+    6. Space-insensitive item_code match
+    7. Space-insensitive custom_sku_code match
+    8. Partial item_code match
+    9. Partial item_name match
+    10. Partial custom_sku_code match (lowest priority)
+    
     This version maintains performance for large datasets (23k+ items)
     """
     # Clean the search text
@@ -39,6 +43,9 @@ def custom_item_search(doctype, txt, searchfield, start, page_len, filters):
 
     # Split search text into terms for partial matching
     terms = search_text.split()
+    
+    # Space-normalized search term for space-insensitive matching
+    search_no_spaces = search_text.replace(' ', '').replace('-', '').replace('_', '').lower()
     
     # Construct conditions for partial item_name matching (all terms must match)
     name_conditions = []
@@ -70,21 +77,17 @@ def custom_item_search(doctype, txt, searchfield, start, page_len, filters):
     
     sku_where_clause = " AND ".join(sku_conditions) if sku_conditions else "1=1"
     
-    # NEW: Word boundary conditions for custom_sku_code
-    # This uses REGEXP to match complete words separated by spaces, hyphens, or other delimiters
+    # Word boundary conditions for custom_sku_code
     word_boundary_conditions = []
     word_boundary_params = []
     
     for term in terms:
-        # MySQL REGEXP pattern for word boundaries
-        # [[:<:]] and [[:>:]] are MySQL word boundary markers
-        # Alternative: (^|[^a-zA-Z0-9]) + term + ([^a-zA-Z0-9]|$)
         word_boundary_conditions.append("item.custom_sku_code REGEXP %s")
         word_boundary_params.append(f'(^|[^a-zA-Z0-9]){re.escape(term)}([^a-zA-Z0-9]|$)')
     
     word_boundary_where_clause = " AND ".join(word_boundary_conditions) if word_boundary_conditions else "1=1"
     
-    # Enhanced query with word boundary priority
+    # Enhanced query with space-insensitive matching
     query = f"""
         SELECT DISTINCT item.name, item.item_name, COALESCE(item.custom_sku_code, '') as custom_sku_code
         FROM `tabItem` item
@@ -94,9 +97,12 @@ def custom_item_search(doctype, txt, searchfield, start, page_len, filters):
             OR item.item_code = %s                 -- 2. Exact item_code match
             OR item.item_name = %s                 -- 3. Exact item_name match
             OR (item.custom_sku_code IS NOT NULL AND {word_boundary_where_clause})  -- 4. Word boundary match in SKU
-            OR ({code_where_clause})               -- 5. Partial item_code match
-            OR ({name_where_clause})               -- 6. Partial item_name match
-            OR (item.custom_sku_code IS NOT NULL AND {sku_where_clause})  -- 7. Partial custom_sku_code match
+            OR (LOWER(REPLACE(REPLACE(REPLACE(item.item_name, ' ', ''), '-', ''), '_', '')) LIKE %s)  -- 5. Space-insensitive item_name
+            OR (LOWER(REPLACE(REPLACE(REPLACE(item.item_code, ' ', ''), '-', ''), '_', '')) LIKE %s)  -- 6. Space-insensitive item_code
+            OR (item.custom_sku_code IS NOT NULL AND LOWER(REPLACE(REPLACE(REPLACE(item.custom_sku_code, ' ', ''), '-', ''), '_', '')) LIKE %s)  -- 7. Space-insensitive SKU
+            OR ({code_where_clause})               -- 8. Partial item_code match
+            OR ({name_where_clause})               -- 9. Partial item_name match
+            OR (item.custom_sku_code IS NOT NULL AND {sku_where_clause})  -- 10. Partial custom_sku_code match
         )
         ORDER BY 
             CASE 
@@ -104,10 +110,13 @@ def custom_item_search(doctype, txt, searchfield, start, page_len, filters):
                 WHEN item.item_code = %s THEN 2            -- 2. Exact item_code
                 WHEN item.item_name = %s THEN 3            -- 3. Exact item_name
                 WHEN item.custom_sku_code IS NOT NULL AND ({word_boundary_where_clause}) THEN 4  -- 4. Word boundary in SKU
-                WHEN ({code_where_clause}) THEN 5          -- 5. Partial item_code
-                WHEN ({name_where_clause}) THEN 6          -- 6. Partial item_name
-                WHEN item.custom_sku_code IS NOT NULL AND ({sku_where_clause}) THEN 7  -- 7. Partial custom_sku_code (lowest priority)
-                ELSE 8
+                WHEN LOWER(REPLACE(REPLACE(REPLACE(item.item_name, ' ', ''), '-', ''), '_', '')) LIKE %s THEN 5  -- 5. Space-insensitive item_name
+                WHEN LOWER(REPLACE(REPLACE(REPLACE(item.item_code, ' ', ''), '-', ''), '_', '')) LIKE %s THEN 6  -- 6. Space-insensitive item_code
+                WHEN item.custom_sku_code IS NOT NULL AND LOWER(REPLACE(REPLACE(REPLACE(item.custom_sku_code, ' ', ''), '-', ''), '_', '')) LIKE %s THEN 7  -- 7. Space-insensitive SKU
+                WHEN ({code_where_clause}) THEN 8          -- 8. Partial item_code
+                WHEN ({name_where_clause}) THEN 9          -- 9. Partial item_name
+                WHEN item.custom_sku_code IS NOT NULL AND ({sku_where_clause}) THEN 10  -- 10. Partial custom_sku_code
+                ELSE 11
             END,
             LENGTH(COALESCE(item.item_name, '')),          -- Shorter names first within same priority
             item.item_name                                 -- Alphabetical within same length
@@ -118,11 +127,13 @@ def custom_item_search(doctype, txt, searchfield, start, page_len, filters):
     query_params = (
         [search_text, search_text, search_text] +  # WHERE clause exact matches
         word_boundary_params +                     # WHERE word boundary matching
+        [f'%{search_no_spaces}%', f'%{search_no_spaces}%', f'%{search_no_spaces}%'] +  # WHERE space-insensitive matching
         code_params +                              # WHERE partial code matching
         name_params +                              # WHERE partial name matching  
         sku_params +                               # WHERE partial SKU matching
         [search_text, search_text, search_text] +  # ORDER BY exact matches
         word_boundary_params +                     # ORDER BY word boundary matching
+        [f'%{search_no_spaces}%', f'%{search_no_spaces}%', f'%{search_no_spaces}%'] +  # ORDER BY space-insensitive matching
         code_params +                              # ORDER BY partial code matching
         name_params +                              # ORDER BY partial name matching
         sku_params +                               # ORDER BY partial SKU matching
@@ -185,10 +196,8 @@ def parse_fields(fields: Union[str, List[str], None]) -> List[str]:
     for field in field_list:
         if field in valid_fields:
             validated_fields.append(field)
-        # else:
-        #     frappe.log_error(f"Invalid field '{field}' requested in item search", "Item Search Warning")
     
-    # Ensure essential fields are included for your specific use case
+    # Ensure essential fields are included
     essential_fields = ['name', 'item_code', 'item_name', 'custom_sku_code', 'brand', 'standard_rate', 'image', 'max_discount', 'stock_uom']
     for field in essential_fields:
         if field not in validated_fields:
@@ -225,9 +234,13 @@ def build_select_clause(field_list: List[str]) -> str:
     
     return "SELECT DISTINCT " + ", ".join(select_fields)
 
-def build_search_conditions(terms: List[str]) -> Dict[str, Any]:
+def build_search_conditions(terms: List[str], search_text: str) -> Dict[str, Any]:
     """Build search conditions and parameters for different match types"""
     conditions = {}
+    
+    # Space-normalized search term for space-insensitive matching
+    search_no_spaces = search_text.replace(' ', '').replace('-', '').replace('_', '').lower()
+    conditions['search_no_spaces'] = search_no_spaces
     
     # Partial matching conditions for all terms
     def build_partial_conditions(field: str, terms: List[str]) -> tuple:
@@ -246,9 +259,7 @@ def build_search_conditions(terms: List[str]) -> Dict[str, Any]:
     word_boundary_params = []
     
     for term in terms:
-        # Use word boundary regex for more precise matching
         word_boundary_conditions.append("item.custom_sku_code REGEXP %s")
-        # Escape special regex characters and create word boundary pattern
         escaped_term = re.escape(term)
         word_boundary_params.append(f'(^|[^a-zA-Z0-9]){escaped_term}([^a-zA-Z0-9]|$)')
     
@@ -268,11 +279,15 @@ def backend_item_search(doctype, txt, searchfield, start, page_len, filters, fie
     2. Exact item_code match
     3. Exact item_name match
     4. Word boundary match in custom_sku_code (complete words)
-    5. Partial item_code match
-    6. Partial item_name match
-    7. Partial custom_sku_code match (lowest priority)
+    5. Space-insensitive item_name match (e.g., "rohanrambhiya" matches "rohan ram bhiya")
+    6. Space-insensitive item_code match
+    7. Space-insensitive custom_sku_code match
+    8. Partial item_code match
+    9. Partial item_name match
+    10. Partial custom_sku_code match (lowest priority)
     
     Optimizations:
+    - Space-insensitive matching using REPLACE and LOWER
     - Reduced code duplication
     - Better parameter handling
     - Field validation with caching
@@ -300,7 +315,7 @@ def backend_item_search(doctype, txt, searchfield, start, page_len, filters, fie
         """
         try:
             results = frappe.db.sql(query, (start, page_len), as_dict=True)
-            return results  # Return clean results without additional formatting
+            return results
         except Exception as e:
             frappe.log_error(f"Database error in item search: {str(e)}", "Item Search Error")
             return []
@@ -314,9 +329,10 @@ def backend_item_search(doctype, txt, searchfield, start, page_len, filters, fie
     terms = terms[:5]  # Limit to 5 terms maximum
     
     # Build search conditions
-    conditions = build_search_conditions(terms)
+    conditions = build_search_conditions(terms, search_text)
+    search_no_spaces = conditions['search_no_spaces']
     
-    # Construct optimized query with proper indexing hints
+    # Construct optimized query with space-insensitive matching
     query = f"""
         {select_clause}
         FROM `tabItem` item USE INDEX (PRIMARY, modified)
@@ -326,9 +342,12 @@ def backend_item_search(doctype, txt, searchfield, start, page_len, filters, fie
             OR item.item_code = %s                 -- 2. Exact item_code match  
             OR item.item_name = %s                 -- 3. Exact item_name match
             OR (item.custom_sku_code IS NOT NULL AND item.custom_sku_code != '' AND {conditions['word_boundary_where']})  -- 4. Word boundary match in SKU
-            OR ({conditions['code_where']})        -- 5. Partial item_code match
-            OR ({conditions['name_where']})        -- 6. Partial item_name match
-            OR (item.custom_sku_code IS NOT NULL AND item.custom_sku_code != '' AND {conditions['sku_where']})  -- 7. Partial custom_sku_code match
+            OR (LOWER(REPLACE(REPLACE(REPLACE(item.item_name, ' ', ''), '-', ''), '_', '')) LIKE %s)  -- 5. Space-insensitive item_name
+            OR (LOWER(REPLACE(REPLACE(REPLACE(item.item_code, ' ', ''), '-', ''), '_', '')) LIKE %s)  -- 6. Space-insensitive item_code
+            OR (item.custom_sku_code IS NOT NULL AND item.custom_sku_code != '' AND LOWER(REPLACE(REPLACE(REPLACE(item.custom_sku_code, ' ', ''), '-', ''), '_', '')) LIKE %s)  -- 7. Space-insensitive SKU
+            OR ({conditions['code_where']})        -- 8. Partial item_code match
+            OR ({conditions['name_where']})        -- 9. Partial item_name match
+            OR (item.custom_sku_code IS NOT NULL AND item.custom_sku_code != '' AND {conditions['sku_where']})  -- 10. Partial custom_sku_code match
         )
         ORDER BY 
             CASE 
@@ -336,10 +355,13 @@ def backend_item_search(doctype, txt, searchfield, start, page_len, filters, fie
                 WHEN item.item_code = %s THEN 2            -- 2. Exact item_code
                 WHEN item.item_name = %s THEN 3            -- 3. Exact item_name
                 WHEN item.custom_sku_code IS NOT NULL AND item.custom_sku_code != '' AND ({conditions['word_boundary_where']}) THEN 4  -- 4. Word boundary in SKU
-                WHEN ({conditions['code_where']}) THEN 5   -- 5. Partial item_code
-                WHEN ({conditions['name_where']}) THEN 6   -- 6. Partial item_name
-                WHEN item.custom_sku_code IS NOT NULL AND item.custom_sku_code != '' AND ({conditions['sku_where']}) THEN 7  -- 7. Partial custom_sku_code
-                ELSE 8
+                WHEN LOWER(REPLACE(REPLACE(REPLACE(item.item_name, ' ', ''), '-', ''), '_', '')) LIKE %s THEN 5  -- 5. Space-insensitive item_name
+                WHEN LOWER(REPLACE(REPLACE(REPLACE(item.item_code, ' ', ''), '-', ''), '_', '')) LIKE %s THEN 6  -- 6. Space-insensitive item_code
+                WHEN item.custom_sku_code IS NOT NULL AND item.custom_sku_code != '' AND LOWER(REPLACE(REPLACE(REPLACE(item.custom_sku_code, ' ', ''), '-', ''), '_', '')) LIKE %s THEN 7  -- 7. Space-insensitive SKU
+                WHEN ({conditions['code_where']}) THEN 8   -- 8. Partial item_code
+                WHEN ({conditions['name_where']}) THEN 9   -- 9. Partial item_name
+                WHEN item.custom_sku_code IS NOT NULL AND item.custom_sku_code != '' AND ({conditions['sku_where']}) THEN 10  -- 10. Partial custom_sku_code
+                ELSE 11
             END,
             LENGTH(COALESCE(item.item_name, '')),          -- Shorter names first within same priority
             item.item_name                                 -- Alphabetical within same length
@@ -348,17 +370,20 @@ def backend_item_search(doctype, txt, searchfield, start, page_len, filters, fie
    
     # Prepare parameters efficiently
     exact_params = [search_text, search_text, search_text]
+    space_insensitive_params = [f'%{search_no_spaces}%', f'%{search_no_spaces}%', f'%{search_no_spaces}%']
     order_params = [search_text, search_text, search_text]
     pagination_params = [start, page_len]
     
     query_params = (
         exact_params +                                      # WHERE clause exact matches
         conditions['word_boundary_params'] +                # WHERE word boundary matching
+        space_insensitive_params +                          # WHERE space-insensitive matching
         conditions['code_params'] +                         # WHERE partial code matching
         conditions['name_params'] +                         # WHERE partial name matching  
         conditions['sku_params'] +                          # WHERE partial SKU matching
         order_params +                                      # ORDER BY exact matches
         conditions['word_boundary_params'] +                # ORDER BY word boundary matching
+        space_insensitive_params +                          # ORDER BY space-insensitive matching
         conditions['code_params'] +                         # ORDER BY partial code matching
         conditions['name_params'] +                         # ORDER BY partial name matching
         conditions['sku_params'] +                          # ORDER BY partial SKU matching
@@ -367,7 +392,7 @@ def backend_item_search(doctype, txt, searchfield, start, page_len, filters, fie
     
     try:
         results = frappe.db.sql(query, query_params, as_dict=True)
-        return results  # Return clean results without additional formatting
+        return results
     except Exception as e:
         frappe.log_error(f"Database error in item search: {str(e)}", "Item Search Error")
         return []
@@ -396,7 +421,7 @@ def backend_debounced_item_search(doctype, txt, searchfield, start, page_len, fi
 # ================================
 # UTILITY FUNCTIONS
 # ================================
-#hi
+
 @frappe.whitelist()
 def get_search_stats():
     """Get search performance statistics for monitoring"""
