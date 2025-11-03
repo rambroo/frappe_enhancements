@@ -1,0 +1,35 @@
+{
+ "add_total_row": 0,
+ "add_translate_data": 0,
+ "columns": [],
+ "creation": "2025-10-16 10:56:05.212659",
+ "disabled": 0,
+ "docstatus": 0,
+ "doctype": "Report",
+ "filters": [],
+ "idx": 0,
+ "is_standard": "Yes",
+ "letterhead": null,
+ "modified": "2025-11-03 14:37:45.283388",
+ "modified_by": "Administrator",
+ "module": "erpnext_enhancements",
+ "name": "Total Outstanding report based on bills",
+ "owner": "Administrator",
+ "prepared_report": 0,
+ "query": "SELECT \r\n    name AS \"Invoice No\",\r\n    customer AS \"Customer Name\",\r\n    posting_date AS \"Posting Date\", \r\n    due_date AS \"Due Date\", \r\n    grand_total AS \"Invoice Amount\", \r\n    outstanding_amount AS \"Outstanding Amount\"\r\nFROM \r\n    `tabSales Invoice`\r\nWHERE \r\n    docstatus = 1 AND outstanding_amount > 0\r\nORDER BY \r\n    due_date ASC;\r\n",
+ "ref_doctype": "Sales Invoice",
+ "report_name": "Total Outstanding report based on bills",
+ "report_type": "Query Report",
+ "roles": [
+  {
+   "role": "Accounts Manager"
+  },
+  {
+   "role": "Accounts User"
+  },
+  {
+   "role": "Employee Self Service"
+  }
+ ],
+ "timeout": 0
+}

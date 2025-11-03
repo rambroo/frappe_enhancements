@@ -1,0 +1,38 @@
+{
+ "add_total_row": 0,
+ "add_translate_data": 0,
+ "columns": [],
+ "creation": "2025-10-16 10:56:06.548536",
+ "disabled": 0,
+ "docstatus": 0,
+ "doctype": "Report",
+ "filters": [],
+ "idx": 0,
+ "is_standard": "Yes",
+ "letterhead": null,
+ "modified": "2025-11-03 14:37:41.401343",
+ "modified_by": "Administrator",
+ "module": "erpnext_enhancements",
+ "name": "Stock Return Report",
+ "owner": "Administrator",
+ "prepared_report": 0,
+ "query": "SELECT \n    \"Purchase Receipt\" AS \"Document Type\",\n    pr.posting_date AS \"Return Date\",\n    CONCAT('<a href=\"/app/purchase-receipt/', pr.name, '\" target=\"_blank\">', pr.name, '</a>') AS \"Document No\",\n    pr.supplier AS \"Party\",\n    CAST(pr.grand_total AS DECIMAL(18,2)) AS \"Total Amount\",\n    pr.status AS \"Status\",\n    pr.posting_date AS order_date  -- Keep raw date for ordering\nFROM \n    `tabPurchase Receipt` pr\nWHERE \n    pr.status IN ('Return', 'Return Issued')\n\nUNION ALL\n\nSELECT \n    \"Sales Invoice\" AS \"Document Type\",\n    si.posting_date AS \"Return Date\",\n    CONCAT('<a href=\"/app/sales-invoice/', si.name, '\" target=\"_blank\">', si.name, '</a>') AS \"Document No\",\n    si.customer AS \"Party\",\n    CAST(si.grand_total AS DECIMAL(18,2)) AS \"Total Amount\",\n    si.status AS \"Status\",\n    si.posting_date AS order_date  -- Keep raw date for ordering\nFROM \n    `tabSales Invoice` si\nWHERE \n    si.status IN ('Return', 'Return Issued')\n\nORDER BY \n    order_date DESC;\n",
+ "ref_doctype": "Stock Entry",
+ "report_name": "Stock Return Report",
+ "report_type": "Query Report",
+ "roles": [
+  {
+   "role": "Stock User"
+  },
+  {
+   "role": "Manufacturing User"
+  },
+  {
+   "role": "Manufacturing Manager"
+  },
+  {
+   "role": "Stock Manager"
+  }
+ ],
+ "timeout": 0
+}

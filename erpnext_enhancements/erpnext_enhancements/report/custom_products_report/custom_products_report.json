@@ -1,0 +1,44 @@
+{
+ "add_total_row": 0,
+ "add_translate_data": 0,
+ "columns": [],
+ "creation": "2025-10-16 10:56:05.889974",
+ "disabled": 0,
+ "docstatus": 0,
+ "doctype": "Report",
+ "filters": [],
+ "idx": 0,
+ "is_standard": "Yes",
+ "letterhead": null,
+ "modified": "2025-11-03 14:37:43.763512",
+ "modified_by": "Administrator",
+ "module": "erpnext_enhancements",
+ "name": "Custom Products Report",
+ "owner": "Administrator",
+ "prepared_report": 0,
+ "query": "SELECT\r\n    i.name AS \"Item Code:Link/Item:150\",\r\n    i.item_name AS \"Item Name::200\",\r\n    i.item_group AS \"Item Group::120\",\r\n    SUM(b.actual_qty) AS \"Total Stock:Float:100\",\r\n    SUM(b.ordered_qty) AS \"Total Ordered Qty:Float:100\",\r\n    SUM(b.reserved_qty) AS \"Total Reserved Qty:Float:100\"\r\nFROM\r\n    `tabItem` i\r\nINNER JOIN\r\n    `tabBin` b ON i.name = b.item_code\r\nWHERE\r\n    i.item_group = 'Custom Products'\r\nGROUP BY\r\n    i.name, i.item_name, i.item_group\r\nORDER BY\r\n    i.name;\r\n",
+ "ref_doctype": "Bin",
+ "report_name": "Custom Products Report",
+ "report_type": "Query Report",
+ "roles": [
+  {
+   "role": "Sales User"
+  },
+  {
+   "role": "Purchase User"
+  },
+  {
+   "role": "Stock User"
+  },
+  {
+   "role": "Stock Manager"
+  },
+  {
+   "role": "Purchase Manager"
+  },
+  {
+   "role": "Sales Manager"
+  }
+ ],
+ "timeout": 0
+}

@@ -1,0 +1,36 @@
+{
+ "attach_print": 0,
+ "channel": "System Notification",
+ "condition": "doc.workflow_state == \"Pending Customer Name Approval\" or doc.workflow_state == \"Pending Approval for Credit limit\"",
+ "creation": "2025-10-16 11:04:22.319173",
+ "days_in_advance": 0,
+ "docstatus": 0,
+ "doctype": "Notification",
+ "document_type": "Sales Order",
+ "enabled": 1,
+ "event": "Save",
+ "idx": 0,
+ "is_standard": 1,
+ "message": "<p>A new Quotation ({{ doc.name }}) requires your approval.</p>\n",
+ "message_type": "Markdown",
+ "modified": "2025-11-03 14:38:22.867764",
+ "modified_by": "Administrator",
+ "module": "erpnext_enhancements",
+ "name": "SO Approval Notification",
+ "owner": "Administrator",
+ "recipients": [
+  {
+   "condition": "doc.workflow_state == \"Pending Customer Name Approval\" or doc.workflow_state == \"Pending Approval for Credit limit\"",
+   "receiver_by_document_field": "owner",
+   "receiver_by_role": "Sales Manager"
+  },
+  {
+   "condition": "doc.workflow_state == \"Pending Customer Name Approval\" or doc.workflow_state == \"Pending Approval for Credit limit\"",
+   "receiver_by_document_field": "owner",
+   "receiver_by_role": "Administrator"
+  }
+ ],
+ "send_system_notification": 0,
+ "send_to_all_assignees": 0,
+ "subject": "Sales Order {{ doc.name }} Requires Approval"
+}

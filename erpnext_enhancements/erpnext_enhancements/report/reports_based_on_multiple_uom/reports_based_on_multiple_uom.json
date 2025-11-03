@@ -1,0 +1,53 @@
+{
+ "add_total_row": 0,
+ "add_translate_data": 0,
+ "columns": [],
+ "creation": "2025-10-16 10:56:05.794060",
+ "disabled": 0,
+ "docstatus": 0,
+ "doctype": "Report",
+ "filters": [],
+ "idx": 0,
+ "is_standard": "Yes",
+ "letterhead": null,
+ "modified": "2025-11-03 14:37:43.138173",
+ "modified_by": "Administrator",
+ "module": "erpnext_enhancements",
+ "name": "Reports based on Multiple UOM",
+ "owner": "Administrator",
+ "prepared_report": 0,
+ "query": "SELECT \n    po.name AS `Purchase Order`, \n    poi.item_code AS `Item Code`, \n    poi.item_name AS `Item Name`, \n    poi.qty AS `Ordered Quantity`, \n    uom1.name AS `UOM (Ordered)`,  -- Using the 'uom' field for ordered quantity\n    poi.received_qty AS `Received Quantity`,\n    uom1.name AS `UOM (Received)`,  -- Using the same 'uom' field for received quantity\n    poi.qty - poi.received_qty AS `Pending Quantity`\nFROM \n    `tabPurchase Order` po\nJOIN \n    `tabPurchase Order Item` poi ON po.name = poi.parent\nJOIN \n    `tabUOM` uom1 ON poi.uom = uom1.name   -- Join for the ordered UOM\nWHERE \n    poi.qty > poi.received_qty  -- Only showing pending items\nORDER BY \n    po.name, poi.item_code;\n",
+ "ref_doctype": "Item",
+ "report_name": "Reports based on Multiple UOM",
+ "report_type": "Query Report",
+ "roles": [
+  {
+   "role": "Item Manager"
+  },
+  {
+   "role": "Stock Manager"
+  },
+  {
+   "role": "Stock User"
+  },
+  {
+   "role": "Sales User"
+  },
+  {
+   "role": "Purchase User"
+  },
+  {
+   "role": "Maintenance User"
+  },
+  {
+   "role": "Accounts User"
+  },
+  {
+   "role": "Manufacturing User"
+  },
+  {
+   "role": "Desk User"
+  }
+ ],
+ "timeout": 0
+}

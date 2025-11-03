@@ -1,0 +1,30 @@
+{
+ "add_total_row": 0,
+ "add_translate_data": 0,
+ "columns": [],
+ "creation": "2025-10-16 10:56:05.382393",
+ "disabled": 0,
+ "docstatus": 0,
+ "doctype": "Report",
+ "filters": [],
+ "idx": 0,
+ "is_standard": "Yes",
+ "letterhead": null,
+ "modified": "2025-11-03 14:37:45.026509",
+ "modified_by": "Administrator",
+ "module": "erpnext_enhancements",
+ "name": "Give Physical vs System stock deviation report",
+ "owner": "Administrator",
+ "prepared_report": 0,
+ "query": "SELECT \n    sri.item_code AS \"Item Code\",  -- From the child table Stock Reconciliation Item\n    i.item_name AS \"Item Name\",    -- Join with Item table to get the item name\n    sri.warehouse AS \"Warehouse\",  \n    sri.qty AS \"Physical Stock\",   -- Quantity entered in Stock Reconciliation Item\n    sle.qty_after_transaction AS \"System Stock\",  -- System stock from Stock Ledger Entry\n    (sri.qty - sle.qty_after_transaction) AS \"Stock Deviation\",  -- Difference between physical and system stock\n    sr.posting_date AS \"Reconciliation Date\"  -- The date of Stock Reconciliation\nFROM \n    `tabStock Reconciliation` sr  -- Main Stock Reconciliation table\nJOIN \n    `tabStock Reconciliation Item` sri ON sr.name = sri.parent  -- Join with Stock Reconciliation Item (child table)\nJOIN \n    `tabItem` i ON sri.item_code = i.item_code  -- Join with Item table to get the item name\nLEFT JOIN \n    `tabStock Ledger Entry` sle ON sle.item_code = sri.item_code \n    AND sle.warehouse = sri.warehouse\n    AND sle.posting_date <= sr.posting_date  -- Use posting_date for the correct system stock\nWHERE \n    sr.docstatus = 1  -- Only include submitted Stock Reconciliation records\nORDER BY \n    sr.posting_date DESC;\n",
+ "ref_doctype": "Stock Reconciliation",
+ "reference_report": "",
+ "report_name": "Give Physical vs System stock deviation report",
+ "report_type": "Query Report",
+ "roles": [
+  {
+   "role": "Stock Manager"
+  }
+ ],
+ "timeout": 0
+}

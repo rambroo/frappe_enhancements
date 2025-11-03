@@ -1,0 +1,21 @@
+{
+ "cards": [],
+ "charts": [
+  {
+   "chart": "Sales Person Targets",
+   "width": "Full"
+  }
+ ],
+ "creation": "2025-02-13 11:17:50.169679",
+ "dashboard_name": "Sales Target Analysis",
+ "docstatus": 0,
+ "doctype": "Dashboard",
+ "idx": 0,
+ "is_default": 0,
+ "is_standard": 1,
+ "modified": "2025-11-03 14:33:18.312391",
+ "modified_by": "Administrator",
+ "module": "erpnext_enhancements",
+ "name": "Sales Target Analysis",
+ "owner": "Administrator"
+}

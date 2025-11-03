@@ -1,0 +1,32 @@
+{
+ "add_total_row": 0,
+ "add_translate_data": 0,
+ "columns": [],
+ "creation": "2025-10-16 10:56:07.013205",
+ "disabled": 0,
+ "docstatus": 0,
+ "doctype": "Report",
+ "filters": [],
+ "idx": 0,
+ "is_standard": "Yes",
+ "letterhead": null,
+ "modified": "2025-11-03 14:37:40.575959",
+ "modified_by": "Administrator",
+ "module": "erpnext_enhancements",
+ "name": "Customer At Risk Analysis",
+ "owner": "Administrator",
+ "prepared_report": 0,
+ "query": "SELECT \n    name, customer_name, sales_stage, expected_closing, \n    opportunity_amount, probability, \n    (opportunity_amount * probability / 100) AS forecasted_revenue, \n    owner, status\nFROM \n    tabOpportunity\nWHERE \n    status != 'Lost' \n    AND probability < 50\nORDER BY \n    expected_closing ASC;\n",
+ "ref_doctype": "Opportunity",
+ "report_name": "Customer At Risk Analysis",
+ "report_type": "Query Report",
+ "roles": [
+  {
+   "role": "Sales User"
+  },
+  {
+   "role": "Sales Manager"
+  }
+ ],
+ "timeout": 0
+}

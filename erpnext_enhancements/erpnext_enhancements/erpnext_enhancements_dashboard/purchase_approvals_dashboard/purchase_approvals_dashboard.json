@@ -1,0 +1,21 @@
+{
+ "cards": [],
+ "charts": [
+  {
+   "chart": "Pending Purchase Orders",
+   "width": "Half"
+  }
+ ],
+ "creation": "2025-02-11 13:14:31.236655",
+ "dashboard_name": "Purchase Approvals Dashboard",
+ "docstatus": 0,
+ "doctype": "Dashboard",
+ "idx": 0,
+ "is_default": 0,
+ "is_standard": 1,
+ "modified": "2025-11-03 14:33:18.791041",
+ "modified_by": "Administrator",
+ "module": "erpnext_enhancements",
+ "name": "Purchase Approvals Dashboard",
+ "owner": "Administrator"
+}

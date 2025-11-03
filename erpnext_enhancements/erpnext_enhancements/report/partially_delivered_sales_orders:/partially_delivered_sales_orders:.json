@@ -1,0 +1,50 @@
+{
+ "add_total_row": 0,
+ "add_translate_data": 0,
+ "columns": [],
+ "creation": "2025-10-16 10:56:06.765693",
+ "disabled": 0,
+ "docstatus": 0,
+ "doctype": "Report",
+ "filters": [],
+ "idx": 0,
+ "is_standard": "Yes",
+ "letterhead": null,
+ "modified": "2025-11-03 14:37:41.544346",
+ "modified_by": "Administrator",
+ "module": "erpnext_enhancements",
+ "name": "Partially delivered sales orders:",
+ "owner": "Administrator",
+ "prepared_report": 0,
+ "query": "SELECT \n    so.name AS \"Sales Order\",\n    so.customer AS \"Customer\",\n    so.status AS \"Sales Order Status\",\n    SUM(soi.qty) AS \"Ordered Qty\",\n    IFNULL(SUM(dni.qty), 0) AS \"Delivered Qty\",\n    (SUM(soi.qty) - IFNULL(SUM(dni.qty), 0)) AS \"Pending Qty\",\n    'Partially Delivered' AS \"Delivery Status\"\nFROM \n    `tabSales Order` so\nJOIN \n    `tabSales Order Item` soi ON soi.parent = so.name\nLEFT JOIN \n    `tabDelivery Note Item` dni ON soi.item_code = dni.item_code \n    AND soi.parent = dni.against_sales_order\nLEFT JOIN \n    `tabDelivery Note` dn ON dni.parent = dn.name\n    AND dn.docstatus = 1  -- Only consider submitted deliveries\nWHERE \n    so.docstatus = 1  -- Only consider submitted sales orders\n    AND so.status = \"To Deliver and Bill\"  -- Filter by required Sales Order status\nGROUP BY \n    so.name\nHAVING \n    SUM(dni.qty) > 0  -- At least some quantity is delivered\n    AND SUM(dni.qty) < SUM(soi.qty)  -- Not fully delivered (i.e., still pending)\nORDER BY \n    so.transaction_date DESC;\n",
+ "ref_doctype": "Sales Order",
+ "report_name": "Partially delivered sales orders:",
+ "report_type": "Query Report",
+ "roles": [
+  {
+   "role": "Accounts User"
+  },
+  {
+   "role": "Maintenance User"
+  },
+  {
+   "role": "Sales Manager"
+  },
+  {
+   "role": "Stock User"
+  },
+  {
+   "role": "Sales User"
+  },
+  {
+   "role": "Temporary Sales User"
+  },
+  {
+   "role": "Customer"
+  },
+  {
+   "role": "portal user"
+  }
+ ],
+ "timeout": 0
+}
