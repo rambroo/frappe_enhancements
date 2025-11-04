@@ -1,0 +1,149 @@
+[
+ {
+  "docstatus": 0,
+  "doctype": "Workflow Action Master",
+  "modified": "2025-03-19 22:10:40.710233",
+  "name": "Review",
+  "workflow_action_name": "Review"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow Action Master",
+  "modified": "2025-04-07 16:38:08.921037",
+  "name": "Approve Transfer",
+  "workflow_action_name": "Approve Transfer"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow Action Master",
+  "modified": "2025-04-07 16:38:19.304754",
+  "name": "Submit for Approval",
+  "workflow_action_name": "Submit for Approval"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow Action Master",
+  "modified": "2025-04-07 16:38:27.395907",
+  "name": "Reject Transfer",
+  "workflow_action_name": "Reject Transfer"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow Action Master",
+  "modified": "2025-03-26 14:57:54.091846",
+  "name": "Request approval for rate limit",
+  "workflow_action_name": "Request approval for rate limit"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow Action Master",
+  "modified": "2025-03-22 17:51:24.026120",
+  "name": "Request Customer Approval",
+  "workflow_action_name": "Request Customer Approval"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow Action Master",
+  "modified": "2025-03-26 14:56:53.096529",
+  "name": "Request discount approval",
+  "workflow_action_name": "Request discount approval"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow Action Master",
+  "modified": "2025-04-07 10:42:31.757501",
+  "name": "Cancel",
+  "workflow_action_name": "Cancel"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow Action Master",
+  "modified": "2025-03-22 17:51:36.574436",
+  "name": "Request Credit Approval",
+  "workflow_action_name": "Request Credit Approval"
+ },
+ {
+  "docstatus": 1,
+  "doctype": "Workflow Action Master",
+  "modified": "2025-04-11 13:38:22.721775",
+  "name": "Requst Approval",
+  "workflow_action_name": "Requst Approval"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow Action Master",
+  "modified": "2025-03-19 22:10:40.708258",
+  "name": "Approve",
+  "workflow_action_name": "Approve"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow Action Master",
+  "modified": "2025-03-19 22:10:40.709334",
+  "name": "Reject",
+  "workflow_action_name": "Reject"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow Action Master",
+  "modified": "2025-03-22 17:43:07.817422",
+  "name": "Submit",
+  "workflow_action_name": "Submit"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow Action Master",
+  "modified": "2025-06-19 14:33:55.299915",
+  "name": "Submit for Billing Approval",
+  "workflow_action_name": "Submit for Billing Approval"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow Action Master",
+  "modified": "2025-06-24 10:54:36.124739",
+  "name": "Return",
+  "workflow_action_name": "Return"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow Action Master",
+  "modified": "2025-06-24 10:43:12.833561",
+  "name": "Cancel Return",
+  "workflow_action_name": "Cancel Return"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow Action Master",
+  "modified": "2025-06-24 12:44:19.143201",
+  "name": "Pending approval",
+  "workflow_action_name": "Pending approval"
+ },
+ {
+  "docstatus": 1,
+  "doctype": "Workflow Action Master",
+  "modified": "2025-04-11 13:38:22.721775",
+  "name": "Request Approval",
+  "workflow_action_name": "Request Approval"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow Action Master",
+  "modified": "2025-08-25 00:14:24.535494",
+  "name": "Submit Without Linking",
+  "workflow_action_name": "Submit Without Linking"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow Action Master",
+  "modified": "2025-08-17 19:06:03.650500",
+  "name": "Process Payment Complete",
+  "workflow_action_name": "Process Payment Complete"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow Action Master",
+  "modified": "2025-08-17 18:30:45.868544",
+  "name": "Await Payment",
+  "workflow_action_name": "Await Payment"
+ }
+]
