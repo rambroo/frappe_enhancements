@@ -1,14 +1,13 @@
 {
  "actions": [],
  "allow_rename": 1,
- "creation": "2025-05-12 01:27:06.870207",
+ "creation": "2025-11-11 15:02:12.035900",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
   "enabled",
   "sender_id",
-  "auth_token",
-  "whatsapp_doctypes"
+  "auth_token"
  ],
  "fields": [
   {
@@ -25,23 +24,17 @@
   {
    "fieldname": "auth_token",
    "fieldtype": "Data",
-   "label": "Token Id"
-  },
-  {
-   "fieldname": "whatsapp_doctypes",
-   "fieldtype": "Table",
-   "label": "WhatsApp Doctypes",
-   "options": "WhatsApp Doctypes"
+   "label": "Token ID"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-05-14 08:48:10.332945",
+ "modified": "2025-11-11 15:03:06.361751",
  "modified_by": "Administrator",
  "module": "erpnext_enhancements",
- "name": "WhatsApp Settings",
+ "name": "WhatsApp Setting",
  "owner": "Administrator",
  "permissions": [
   {

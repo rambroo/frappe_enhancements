@@ -10,11 +10,11 @@ def safe_get_settings():
     if frappe.flags.in_install or frappe.flags.in_patch or frappe.flags.in_migrate:
         return None
 
-    if not frappe.db.exists("DocType", "WhatsApp Settings"):
+    if not frappe.db.exists("DocType", "WhatsApp Setting"):
         return None
 
     try:
-        return frappe.get_single("WhatsApp Settings")
+        return frappe.get_single("WhatsApp Setting")
     except ImportError as e:
         frappe.log_error(f"Could not load WhatsApp Settings: {e}", "WhatsApp Settings")
         return None
@@ -166,65 +166,6 @@ class MessageTemplateHandler:
             return text
 
     @staticmethod
-    def build_message(doc, doctype_setting, is_reminder=False, target_date=None, target_time=None, trigger_event=None):
-        """Build WhatsApp message using template or default format"""
-        
-        try:
-            # Handle different trigger events
-            if trigger_event == "Cancel":
-                if doctype_setting.custom_template:
-                    template_doc = frappe.get_doc("WhatsApp Message Template", 
-                                                doctype_setting.custom_template)
-                    
-                    if template_doc and template_doc.is_active and template_doc.template_text:
-                        return MessageTemplateHandler._process_template(
-                            template_doc.template_text, doc, target_date, target_time
-                        )
-                
-                return f"{doc.doctype} *{doc.name}* has been cancelled."
-            
-            # Handle scheduled reminders (both time and date based)
-            if trigger_event == "Scheduled Reminder" or is_reminder:
-                if doctype_setting.reminder_message:
-                    return MessageTemplateHandler._process_template(
-                        doctype_setting.reminder_message, doc, target_date, target_time
-                    )
-                
-                if doctype_setting.custom_template:
-                    template_doc = frappe.get_doc("WhatsApp Message Template", 
-                                                doctype_setting.custom_template)
-                    
-                    if template_doc and template_doc.is_active and template_doc.template_text:
-                        return MessageTemplateHandler._process_template(
-                            template_doc.template_text, doc, target_date, target_time
-                        )
-                
-                return MessageTemplateHandler._build_default_message(
-                    doc, is_reminder=True, target_date=target_date, target_time=target_time
-                )
-            
-            # Handle other events (Submit/Save/Creation/Update)
-            if doctype_setting.custom_template:
-                template_doc = frappe.get_doc("WhatsApp Message Template", 
-                                            doctype_setting.custom_template)
-                
-                if template_doc and template_doc.is_active and template_doc.template_text:
-                    return MessageTemplateHandler._process_template(
-                        template_doc.template_text, doc, target_date, target_time
-                    )
-            
-            return MessageTemplateHandler._build_default_message(
-                doc, is_reminder=False, target_date=target_date, target_time=target_time, trigger_event=trigger_event
-            )
-            
-        except Exception as e:
-            frappe.log_error(f"Error building message: {str(e)}", 
-                           f"WhatsApp Template Error - {doc.doctype}")
-            return MessageTemplateHandler._build_fallback_message(
-                doc, is_reminder, target_date, target_time, trigger_event
-            )
-
-    @staticmethod
     def format_whatsapp_message(message):
         """Format message for WhatsApp with proper line breaks"""
         if not message:
@@ -232,22 +173,21 @@ class MessageTemplateHandler:
         
         # Replace various line break formats with \n
         replacements = [
-            ('%0A\\n', '\n'),      # %0A\n combination
-            ('%0A', '\n'),         # URL encoded line break
-            ('\\n', '\n'),         # Escaped newline
-            ('/n', '\n'),          # Common typo
-            ('&lt;br&gt;', '\n'),  # HTML br tags (encoded)
-            ('<br>', '\n'),        # HTML br tags
-            ('<br/>', '\n'),       # HTML br tags (self-closing)
-            ('<BR>', '\n'),        # HTML BR tags (uppercase)
-            ('&nbsp;', ' '),       # Non-breaking space
+            ('%0A\\n', '\n'),
+            ('%0A', '\n'),
+            ('\\n', '\n'),
+            ('/n', '\n'),
+            ('&lt;br&gt;', '\n'),
+            ('<br>', '\n'),
+            ('<br/>', '\n'),
+            ('<BR>', '\n'),
+            ('&nbsp;', ' '),
         ]
         
         for old, new in replacements:
             message = message.replace(old, new)
         
         # Clean up multiple consecutive line breaks (more than 2)
-        import re
         message = re.sub(r'\n{3,}', '\n\n', message)
         
         # Remove trailing whitespace from each line
@@ -256,6 +196,32 @@ class MessageTemplateHandler:
         message = '\n'.join(lines)
         
         return message.strip()
+
+    @staticmethod
+    def build_message(doc, notification, is_reminder=False, target_date=None, target_time=None):
+        """Build WhatsApp message using template"""
+        
+        try:
+            # Get template if specified
+            if notification.message:
+                template_doc = frappe.get_doc("WhatsApp Message Template", notification.message)
+                
+                if template_doc and template_doc.is_active and template_doc.template_text:
+                    return MessageTemplateHandler._process_template(
+                        template_doc.template_text, doc, target_date, target_time
+                    )
+            
+            # Fallback to default message
+            return MessageTemplateHandler._build_default_message(
+                doc, notification, target_date, target_time
+            )
+            
+        except Exception as e:
+            frappe.log_error(f"Error building message: {str(e)}", 
+                           f"WhatsApp Template Error - {doc.doctype}")
+            return MessageTemplateHandler._build_fallback_message(
+                doc, notification, target_date, target_time
+            )
 
     @staticmethod
     def _process_template(template_text, doc, target_date=None, target_time=None):
@@ -335,15 +301,12 @@ class MessageTemplateHandler:
                     '{days_remaining}': "", '{days_left}': "", '{day_text}': ""
                 })
         
-        # NEW: Time placeholders
+        # Time placeholders
         if target_time:
             try:
-                from datetime import timedelta
-                
                 if isinstance(target_time, str):
                     time_str = target_time
                 elif isinstance(target_time, timedelta):
-                    # Convert timedelta to time format
                     total_seconds = int(target_time.total_seconds())
                     hours = total_seconds // 3600
                     minutes = (total_seconds % 3600) // 60
@@ -377,7 +340,6 @@ class MessageTemplateHandler:
             if hasattr(doc, field):
                 value = getattr(doc, field)
                 if value:
-                    # Clean HTML for text fields
                     if isinstance(value, str) and field in ['description', 'remarks', 'subject', 'title']:
                         value = MessageTemplateHandler.clean_html(value)
                     elif hasattr(value, 'strftime'):
@@ -393,17 +355,15 @@ class MessageTemplateHandler:
         return placeholders
     
     @staticmethod
-    def _build_default_message(doc, is_reminder=False, target_date=None, target_time=None, trigger_event=None):
+    def _build_default_message(doc, notification, target_date=None, target_time=None):
         """Build default message format including time information"""
-        if is_reminder or trigger_event == "Scheduled Reminder":
+        
+        if notification.event == "Scheduled Reminder":
             if target_date and target_time:
                 try:
-                    from datetime import timedelta
-                    
                     if isinstance(target_time, str):
                         time_str = target_time
                     elif isinstance(target_time, timedelta):
-                        # Convert timedelta to time format
                         total_seconds = int(target_time.total_seconds())
                         hours = total_seconds // 3600
                         minutes = (total_seconds % 3600) // 60
@@ -431,7 +391,7 @@ class MessageTemplateHandler:
                 "On Update": f"{doc.doctype} *{doc.name}* has been updated."
             }
             
-            message = event_messages.get(trigger_event, 
+            message = event_messages.get(notification.event, 
                                        f"{doc.doctype} *{doc.name}* has been processed.")
         
         # Add amount if available
@@ -439,20 +399,17 @@ class MessageTemplateHandler:
         if amount:
             message += f"\nTotal Amount: ₹{amount}"
     
-        # Format the message for WhatsApp
         message = MessageTemplateHandler.format_whatsapp_message(message)    
         return message
     
     @staticmethod
-    def _build_fallback_message(doc, is_reminder=False, target_date=None, target_time=None, trigger_event=None):
+    def _build_fallback_message(doc, notification, target_date=None, target_time=None):
         """Build basic fallback message including time"""
-        if is_reminder or trigger_event == "Scheduled Reminder":
+        
+        if notification.event == "Scheduled Reminder":
             if target_date and target_time:
                 try:
-                    from datetime import timedelta
-                    
                     if isinstance(target_time, timedelta):
-                        # Convert timedelta to time format
                         total_seconds = int(target_time.total_seconds())
                         hours = total_seconds // 3600
                         minutes = (total_seconds % 3600) // 60
@@ -479,15 +436,47 @@ class MessageTemplateHandler:
                 "On Update": f"{doc.doctype} {doc.name} has been updated."
             }
             
-            message = event_messages.get(trigger_event, f"{doc.doctype} {doc.name} has been processed.")
+            message = event_messages.get(notification.event, f"{doc.doctype} {doc.name} has been processed.")
         
-        # Format the message for WhatsApp
         message = MessageTemplateHandler.format_whatsapp_message(message)
         
         return message
 
 
-# Phone number utilities (unchanged)
+# ============================================================================
+# NOTIFICATION QUERY HELPERS
+# ============================================================================
+
+def get_active_notifications(document_type=None, event=None):
+    """
+    Get active WhatsApp Notifications with optional filters
+    
+    Args:
+        document_type: Filter by Document Type
+        event: Filter by event (Submit, Save, Cancel, etc.)
+    
+    Returns:
+        list: List of notification names
+    """
+    filters = {"enabled": 1}
+    
+    if document_type:
+        filters["document_type"] = document_type
+    
+    if event:
+        filters["event"] = event
+    
+    return frappe.get_all(
+        "WhatsApp Notification",
+        filters=filters,
+        fields=["name"]
+    )
+
+
+# ============================================================================
+# PHONE NUMBER UTILITIES
+# ============================================================================
+
 def get_phone_number(doc, phone_field):
     """Get phone number from document with support for linked fields"""
     if not phone_field:
@@ -598,7 +587,6 @@ def get_user_phone_number(doc, user_field):
 def get_assigned_user_phone_numbers(doc):
     """Get phone numbers for all assigned users from ToDo doctype"""
     try:
-        # Find all ToDo entries for this document
         todo_filters = {
             "reference_type": doc.doctype,
             "reference_name": doc.name,
@@ -608,7 +596,6 @@ def get_assigned_user_phone_numbers(doc):
         todos = frappe.get_all("ToDo", filters=todo_filters, fields=["allocated_to"])
         
         if not todos:
-            # Try without status filter
             todos = frappe.get_all(
                 "ToDo",
                 filters={"reference_type": doc.doctype, "reference_name": doc.name},
@@ -630,7 +617,6 @@ def get_assigned_user_phone_numbers(doc):
             try:
                 user_doc = frappe.get_doc("User", todo.allocated_to)
                 
-                # Try multiple phone fields
                 phone_fields_to_try = ['mobile_no', 'phone', 'cell_number', 'whatsapp_number']
                 
                 user_phone = None
@@ -662,10 +648,173 @@ def get_assigned_user_phone_numbers(doc):
         return []
 
 
+def get_phone_numbers_by_role(role):
+    """
+    Get phone numbers for all users with specific role
+    
+    Args:
+        role: Role name
+    
+    Returns:
+        list: [{"phone": str, "user": str}]
+    """
+    try:
+        # Get all users with this role
+        users = frappe.get_all(
+            "Has Role",
+            filters={"role": role, "parenttype": "User"},
+            fields=["parent"]
+        )
+        
+        if not users:
+            return []
+        
+        phone_numbers = []
+        processed_users = set()
+        
+        for user_data in users:
+            username = user_data.parent
+            
+            if username in processed_users:
+                continue
+            
+            processed_users.add(username)
+            
+            try:
+                user_doc = frappe.get_doc("User", username)
+                
+                # Skip disabled users
+                if user_doc.enabled == 0:
+                    continue
+                
+                # Try multiple phone fields
+                phone_fields_to_try = ['mobile_no', 'phone', 'cell_number', 'whatsapp_number']
+                
+                user_phone = None
+                for field in phone_fields_to_try:
+                    if hasattr(user_doc, field):
+                        phone = getattr(user_doc, field)
+                        if phone:
+                            cleaned_phone = WhatsAppHandler()._clean_phone_number(phone)
+                            if cleaned_phone:
+                                user_phone = cleaned_phone
+                                break
+                
+                if user_phone:
+                    phone_numbers.append({
+                        'phone': user_phone,
+                        'user': username
+                    })
+                    
+            except Exception as user_error:
+                frappe.log_error(f"Error processing user {username}: {str(user_error)}", 
+                               f"Role User Error - {role}")
+                continue
+        
+        return phone_numbers
+        
+    except Exception as e:
+        frappe.log_error(f"Error getting users by role {role}: {str(e)}", 
+                        "Role Phone Error")
+        return []
+
+
+# ============================================================================
+# RECIPIENT PROCESSING
+# ============================================================================
+
+def process_notification_recipients(doc, notification):
+    """
+    Process all recipients from notification and return list of phone numbers
+    
+    Args:
+        doc: Document object
+        notification: WhatsApp Notification document
+    
+    Returns:
+        list: [{"phone": str, "source": str}] - source indicates where phone came from
+    """
+    all_phones = []
+    
+    # Handle send_to_all_assignees flag
+    if getattr(notification, 'send_to_all_assignees', False):
+        assigned_phones = get_assigned_user_phone_numbers(doc)
+        for assigned in assigned_phones:
+            all_phones.append({
+                'phone': assigned['phone'],
+                'source': f"Assigned User: {assigned['user']}"
+            })
+    
+    # Process recipients child table
+    if not notification.recipients:
+        return all_phones
+    
+    for recipient in notification.recipients:
+        try:
+            # Check recipient-level condition if exists
+            if recipient.condition:
+                if not evaluate_custom_condition(doc, recipient.condition):
+                    frappe.log_error(
+                        f"Recipient condition not met for {doc.name}",
+                        f"WhatsApp Recipient Condition Skip - {doc.doctype}"
+                    )
+                    continue
+            
+            # Handle receiver_by_document_field
+            if recipient.receiver_by_document_field:
+                phone = get_phone_number_enhanced(doc, recipient.receiver_by_document_field)
+                if phone:
+                    all_phones.append({
+                        'phone': phone,
+                        'source': f"Field: {recipient.receiver_by_document_field}"
+                    })
+                else:
+                    frappe.log_error(
+                        f"No phone found for field '{recipient.receiver_by_document_field}' in {doc.name}",
+                        f"WhatsApp Recipient Phone - {doc.doctype}"
+                    )
+            
+            # Handle receiver_by_role
+            if recipient.receiver_by_role:
+                role_phones = get_phone_numbers_by_role(recipient.receiver_by_role)
+                for role_phone in role_phones:
+                    all_phones.append({
+                        'phone': role_phone['phone'],
+                        'source': f"Role: {recipient.receiver_by_role} - User: {role_phone['user']}"
+                    })
+                
+                if not role_phones:
+                    frappe.log_error(
+                        f"No users with phone found for role '{recipient.receiver_by_role}'",
+                        f"WhatsApp Role Phone - {doc.doctype}"
+                    )
+        
+        except Exception as e:
+            frappe.log_error(
+                f"Error processing recipient: {str(e)}",
+                f"WhatsApp Recipient Error - {doc.doctype}"
+            )
+            continue
+    
+    # Remove duplicates while preserving order
+    seen_phones = set()
+    unique_phones = []
+    for phone_data in all_phones:
+        if phone_data['phone'] not in seen_phones:
+            seen_phones.add(phone_data['phone'])
+            unique_phones.append(phone_data)
+    
+    return unique_phones
+
+
+# ============================================================================
+# CONDITION EVALUATION
+# ============================================================================
+
 def evaluate_custom_condition(doc, condition_code):
     """
     Evaluate custom condition code for WhatsApp notifications
-    Similar to Frappe's notification system - FIXED VERSION
+    Similar to Frappe's notification system
     """
     if not condition_code or not condition_code.strip():
         return True  # No condition means always send
@@ -684,7 +833,7 @@ def evaluate_custom_condition(doc, condition_code):
             'flt': frappe.utils.flt
         }
         
-        # Add all document fields to context for easy access
+        # Add all document fields to context
         try:
             valid_columns = doc.meta.get_valid_columns()
             for fieldname in valid_columns:
@@ -712,7 +861,6 @@ def evaluate_custom_condition(doc, condition_code):
         return bool(result)
         
     except Exception as e:
-        # Log the error and default to not sending to prevent spam
         frappe.log_error(
             f"Error evaluating condition: {str(e)}\nCondition: {condition_code}\nDocument: {doc.name}",
             f"WhatsApp Condition Error - {doc.doctype}"
@@ -720,80 +868,380 @@ def evaluate_custom_condition(doc, condition_code):
         return False
 
 
-# NEW: Time-based reminder processing
+# ============================================================================
+# DOCUMENT EVENT HANDLERS (IMMEDIATE NOTIFICATIONS)
+# ============================================================================
+
+def handle_whatsapp_notification_submit(doc, method):
+    """Handle WhatsApp notification for submitted documents"""
+    _handle_whatsapp_notification(doc, method, "Submit")
+
+
+def handle_whatsapp_notification_save(doc, method):
+    """Handle WhatsApp notification for saved documents"""
+    _handle_whatsapp_notification(doc, method, "Save")
+
+
+def handle_whatsapp_notification_cancel(doc, method):
+    """Handle WhatsApp notification for cancelled documents"""
+    _handle_whatsapp_notification(doc, method, "Cancel")
+
+
+def handle_whatsapp_notification_creation(doc, method):
+    """Handle WhatsApp notification for newly created documents"""
+    _handle_whatsapp_notification(doc, method, "On Creation")
+
+
+def handle_whatsapp_notification_update(doc, method):
+    """Handle WhatsApp notification for updated documents"""
+    if doc.is_new():
+        return
+    _handle_whatsapp_notification(doc, method, "On Update")
+
+
+def _handle_whatsapp_notification(doc, method, trigger_event):
+    """Unified WhatsApp notification handler for immediate events"""
+    try:
+        # Skip internal/system doctypes to prevent recursion and performance issues
+        excluded_doctypes = [
+            'WhatsApp Notification', 'WhatsApp Notification Recipient',
+            'WhatsApp Message Template', 'WhatsApp Setting',
+            'Comment', 'Communication', 'Email Queue', 'Notification Log',
+            'Activity Log', 'Error Log', 'Scheduled Job Log', 'Version',
+            'Access Log', 'Route History', 'View Log', 'Energy Point Log',
+            'Notification Settings', 'Web Form', 'Web Page', 'Portal Settings'
+        ]
+        
+        if doc.doctype in excluded_doctypes:
+            return
+        
+        settings = safe_get_settings()
+        if not settings or not settings.enabled:
+            return
+
+        # Get matching notifications
+        notifications = get_active_notifications(
+            document_type=doc.doctype,
+            event=trigger_event
+        )
+        
+        if not notifications:
+            return
+
+        whatsapp_handler = WhatsAppHandler()
+        
+        for notification_data in notifications:
+            try:
+                notification = frappe.get_doc("WhatsApp Notification", notification_data.name)
+                
+                # Check notification-level condition
+                if notification.condition:
+                    if not evaluate_custom_condition(doc, notification.condition):
+                        frappe.log_error(
+                            f"Notification condition not met for {doc.name}",
+                            f"WhatsApp Condition Skip - {doc.doctype}"
+                        )
+                        continue
+                
+                # Process notification
+                _process_whatsapp_notification(doc, notification, whatsapp_handler)
+                
+            except Exception as e:
+                frappe.log_error(
+                    f"Notification processing failed for {notification_data.name}: {str(e)}", 
+                    f"WhatsApp Notification Error - {doc.doctype}"
+                )
+
+    except Exception as e:
+        frappe.log_error(f"WhatsApp notification handler failed: {str(e)}", 
+                        f"DocType: {doc.doctype}, Name: {doc.name}")
+
+
+def _process_whatsapp_notification(doc, notification, whatsapp_handler):
+    """Process individual WhatsApp notification and send to all recipients"""
+    
+    # Get all recipient phone numbers
+    recipients = process_notification_recipients(doc, notification)
+    
+    if not recipients:
+        frappe.log_error(
+            f"No recipients found for notification {notification.name}",
+            f"WhatsApp Recipients - {doc.doctype}"
+        )
+        return
+    
+    # Build message once
+    message = MessageTemplateHandler.build_message(doc, notification)
+    
+    # Send to all recipients
+    success_count = error_count = 0
+    
+    for recipient in recipients:
+        try:
+            if whatsapp_handler.send_message(
+                recipient['phone'], message, doc.doctype, doc.name
+            ):
+                success_count += 1
+                frappe.log_error(
+                    f"Message sent to {recipient['source']} ({recipient['phone']})",
+                    f"WhatsApp Success - {doc.doctype}"
+                )
+            else:
+                error_count += 1
+        except Exception as send_error:
+            error_count += 1
+            frappe.log_error(
+                f"Error sending to {recipient['source']}: {str(send_error)}", 
+                f"WhatsApp Send Error - {doc.doctype}"
+            )
+    
+    # Log summary
+    if success_count > 0 or error_count > 0:
+        frappe.log_error(
+            f"Notification '{notification.name}': {success_count} sent, {error_count} failed", 
+            f"WhatsApp Summary - {doc.doctype}"
+        )
+
+
+# ============================================================================
+# SCHEDULED REMINDERS (DATE-BASED - DAILY CRON)
+# ============================================================================
+
+def send_scheduled_whatsapp_reminders_enhanced():
+    """
+    Main scheduler for date-based reminders (runs daily)
+    Handles both document-level and child table reminders
+    """
+    settings = safe_get_settings()
+    if not settings or not settings.enabled:
+        frappe.log_error("WhatsApp reminders skipped", "WhatsApp Settings disabled")
+        return
+
+    # Get all scheduled reminder notifications (date-based only, not time-based)
+    notifications = frappe.get_all(
+        "WhatsApp Notification",
+        filters={
+            "enabled": 1,
+            "event": "Scheduled Reminder",
+            "add_timing": 0  # Only date-based reminders
+        },
+        fields=["name"]
+    )
+
+    for notification_data in notifications:
+        try:
+            notification = frappe.get_doc("WhatsApp Notification", notification_data.name)
+            
+            # Check if date_field is configured
+            if not notification.date_field:
+                frappe.log_error(
+                    f"No date_field configured for notification {notification.name}",
+                    "WhatsApp Reminder Config Error"
+                )
+                continue
+            
+            # Process the reminder
+            if '.' in notification.date_field:
+                # Child table reminder
+                process_child_table_reminders(notification)
+            else:
+                # Document-level reminder
+                process_document_reminders(notification)
+                
+        except Exception as e:
+            frappe.log_error(
+                f"Scheduler failed for notification {notification_data.name}: {str(e)}", 
+                f"WhatsApp Scheduler Error"
+            )
+
+
+def process_document_reminders(notification):
+    """Process document-level date-based reminders"""
+    
+    date_field = notification.date_field
+    
+    # Calculate target date based on days_before or days_after
+    if notification.days_before:
+        target_date = add_days(nowdate(), notification.days_before)
+    elif notification.days_after:
+        target_date = add_days(nowdate(), -(notification.days_after))
+    else:
+        target_date = nowdate()
+    
+    # Build filters
+    filters = {date_field: target_date}
+    
+    # Exclude cancelled documents for submittable doctypes
+    submittable_doctypes = [
+        "Purchase Order", "Sales Order", "Purchase Invoice", 
+        "Sales Invoice", "Delivery Note", "Purchase Receipt"
+    ]
+    
+    if notification.document_type in submittable_doctypes:
+        filters["docstatus"] = ["!=", 2]
+    
+    # Get matching documents
+    try:
+        docs = frappe.get_all(
+            notification.document_type,
+            filters=filters,
+            fields=["name", "docstatus"] if notification.document_type in submittable_doctypes else ["name"]
+        )
+    except Exception as e:
+        frappe.log_error(
+            f"Error querying documents: {str(e)}",
+            f"WhatsApp Reminder Query - {notification.document_type}"
+        )
+        return
+
+    whatsapp_handler = WhatsAppHandler()
+    success_count = error_count = condition_skip_count = 0
+
+    for d in docs:
+        try:
+            # Skip cancelled documents
+            if hasattr(d, 'docstatus') and d.docstatus == 2:
+                continue
+                
+            doc = frappe.get_doc(notification.document_type, d.name)
+            
+            if hasattr(doc, 'docstatus') and doc.docstatus == 2:
+                continue
+            
+            # Check notification-level condition
+            if notification.condition:
+                if not evaluate_custom_condition(doc, notification.condition):
+                    condition_skip_count += 1
+                    continue
+            
+            # Get recipients
+            recipients = process_notification_recipients(doc, notification)
+            
+            if not recipients:
+                error_count += 1
+                continue
+
+            # Build message
+            message = MessageTemplateHandler.build_message(
+                doc, notification,
+                is_reminder=True,
+                target_date=target_date
+            )
+            
+            # Send to all recipients
+            for recipient in recipients:
+                try:
+                    if whatsapp_handler.send_message(recipient['phone'], message, doc.doctype, doc.name):
+                        success_count += 1
+                    else:
+                        error_count += 1
+                except Exception as send_error:
+                    error_count += 1
+                    frappe.log_error(
+                        f"Send failed to {recipient['source']}: {str(send_error)}",
+                        f"WhatsApp Reminder Send Error"
+                    )
+                
+        except Exception as e:
+            frappe.log_error(f"Failed to process reminder for {d.name}: {str(e)}", 
+                           f"WhatsApp Reminder Error")
+            error_count += 1
+
+    # Log summary
+    if success_count > 0 or error_count > 0 or condition_skip_count > 0:
+        frappe.log_error(
+            f"Reminders processed for {notification.name} - Success: {success_count}, "
+            f"Errors: {error_count}, Condition Skips: {condition_skip_count}", 
+            f"WhatsApp Reminder Summary - {notification.document_type}"
+        )
+
+
+# ============================================================================
+# SCHEDULED REMINDERS (TIME-BASED - HOURLY CRON)
+# ============================================================================
+
 def process_scheduled_whatsapp_time_reminders():
-    """Process time-based WhatsApp reminders - NEW FUNCTION"""
+    """Process time-based WhatsApp reminders (runs hourly)"""
     settings = safe_get_settings()
     if not settings or not settings.enabled:
         frappe.log_error("WhatsApp time reminders skipped", "WhatsApp Settings disabled")
         return
     
-    # Get all time-based reminder configurations
-    time_based_configs = [
-        config for config in settings.whatsapp_doctypes
-        if (config.schedule_enabled and 
-            config.enable_whatsapp and
-            config.trigger_event == "Scheduled Reminder" and
-            config.date_field and
-            getattr(config, 'custom_add_timing', 0) and
-            getattr(config, 'custom_time_field', None) and
-            getattr(config, 'custom_hours_before', None))
-    ]
+    # Get all time-based reminder notifications
+    notifications = frappe.get_all(
+        "WhatsApp Notification",
+        filters={
+            "enabled": 1,
+            "event": "Scheduled Reminder",
+            "add_timing": 1  # Only time-based reminders
+        },
+        fields=["name"]
+    )
     
-    if not time_based_configs:
-        frappe.log_error("No time-based WhatsApp configurations found", "WhatsApp Time Reminder")
+    if not notifications:
+        frappe.log_error("No time-based WhatsApp notifications found", "WhatsApp Time Reminder")
         return
     
-    for config in time_based_configs:
+    for notification_data in notifications:
         try:
-            process_time_based_reminder_config(config)
+            notification = frappe.get_doc("WhatsApp Notification", notification_data.name)
+            
+            # Validate time-based fields
+            if not notification.time_field or not notification.hours_before:
+                frappe.log_error(
+                    f"Incomplete time config for notification {notification.name}",
+                    "WhatsApp Time Config Error"
+                )
+                continue
+            
+            process_time_based_reminders(notification)
+            
         except Exception as e:
             frappe.log_error(
-                f"Time-based reminder failed for {config.table_doctype}: {str(e)}", 
+                f"Time reminder failed for {notification_data.name}: {str(e)}", 
                 f"WhatsApp Time Reminder Error"
             )
 
 
-def process_time_based_reminder_config(config):
-    """Process time-based reminders for a specific doctype configuration"""
+def process_time_based_reminders(notification):
+    """Process time-based reminders for a notification"""
+    
     current_datetime = now_datetime()
     current_date = current_datetime.date()
-    current_time = current_datetime.time()
     
     # Calculate time range for checking
-    hours_before = getattr(config, 'custom_hours_before', 1)
+    hours_before = notification.hours_before
     target_start_time = current_datetime
     target_end_time = add_to_date(current_datetime, hours=hours_before)
     
     frappe.log_error(
-        f"Processing time reminders: {config.table_doctype}, "
+        f"Processing time reminders: {notification.document_type}, "
         f"Time range: {target_start_time.strftime('%H:%M')} - {target_end_time.strftime('%H:%M')}", 
-        f"WhatsApp Time Debug - {config.table_doctype}"
+        f"WhatsApp Time Debug - {notification.document_type}"
     )
     
     # Get documents with today's date in the date_field
-    date_filters = {f"{config.date_field}": current_date}
+    date_filters = {notification.date_field: current_date}
     
     # Exclude cancelled documents for submittable doctypes
     submittable_doctypes = [
         "Purchase Order", "Sales Order", "Purchase Invoice", 
-        "Sales Invoice", "Delivery Note", "Purchase Receipt",
-        "Appointment"  # Add your custom doctypes here
+        "Sales Invoice", "Delivery Note", "Purchase Receipt"
     ]
     
-    if config.table_doctype in submittable_doctypes:
+    if notification.document_type in submittable_doctypes:
         date_filters["docstatus"] = ["!=", 2]
     
     try:
         docs = frappe.get_all(
-            config.table_doctype, 
-            filters=date_filters, 
-            fields=["name", "docstatus", config.custom_time_field] if config.table_doctype in submittable_doctypes 
-            else ["name", config.custom_time_field]
+            notification.document_type,
+            filters=date_filters,
+            fields=["name", "docstatus", notification.time_field] if notification.document_type in submittable_doctypes 
+            else ["name", notification.time_field]
         )
     except Exception as e:
         frappe.log_error(f"Error querying documents: {str(e)}", 
-                        f"WhatsApp Time Query Error - {config.table_doctype}")
+                        f"WhatsApp Time Query Error - {notification.document_type}")
         return
     
     whatsapp_handler = WhatsAppHandler()
@@ -805,13 +1253,13 @@ def process_time_based_reminder_config(config):
             if hasattr(d, 'docstatus') and d.docstatus == 2:
                 continue
             
-            doc = frappe.get_doc(config.table_doctype, d.name)
+            doc = frappe.get_doc(notification.document_type, d.name)
             
             if hasattr(doc, 'docstatus') and doc.docstatus == 2:
                 continue
             
             # Get the time field value
-            time_field_value = getattr(doc, config.custom_time_field, None)
+            time_field_value = getattr(doc, notification.time_field, None)
             if not time_field_value:
                 time_skip_count += 1
                 continue
@@ -821,95 +1269,88 @@ def process_time_based_reminder_config(config):
                 time_skip_count += 1
                 continue
             
-            # Check custom condition
-            if hasattr(config, 'custom_condition') and config.custom_condition:
-                if not evaluate_custom_condition(doc, config.custom_condition):
+            # Check notification-level condition
+            if notification.condition:
+                if not evaluate_custom_condition(doc, notification.condition):
                     condition_skip_count += 1
                     continue
             
-            # Get phone number
-            phone = get_phone_number_enhanced(doc, config.phone_field)
-            if not phone:
+            # Get recipients
+            recipients = process_notification_recipients(doc, notification)
+            
+            if not recipients:
                 error_count += 1
-                frappe.log_error(f"No phone found for {doc.name}", 
-                               f"WhatsApp Time Phone Error - {config.table_doctype}")
+                frappe.log_error(f"No recipients found for {doc.name}", 
+                               f"WhatsApp Time Recipients Error - {notification.document_type}")
                 continue
             
             # Build message with time information
             message = MessageTemplateHandler.build_message(
-                doc, config, 
-                is_reminder=True, 
+                doc, notification,
+                is_reminder=True,
                 target_date=current_date,
-                target_time=time_field_value,
-                trigger_event="Scheduled Reminder"
+                target_time=time_field_value
             )
             
-            # Send message
-            if whatsapp_handler.send_message(phone, message, doc.doctype, doc.name):
-                success_count += 1
-                frappe.log_error(
-                    f"Time reminder sent for {doc.name} at {time_field_value}", 
-                    f"WhatsApp Time Success - {config.table_doctype}"
-                )
-            else:
-                error_count += 1
+            # Send to all recipients
+            for recipient in recipients:
+                try:
+                    if whatsapp_handler.send_message(recipient['phone'], message, doc.doctype, doc.name):
+                        success_count += 1
+                        frappe.log_error(
+                            f"Time reminder sent for {doc.name} at {time_field_value} to {recipient['source']}", 
+                            f"WhatsApp Time Success - {notification.document_type}"
+                        )
+                    else:
+                        error_count += 1
+                except Exception as send_error:
+                    error_count += 1
+                    frappe.log_error(
+                        f"Send failed to {recipient['source']}: {str(send_error)}",
+                        f"WhatsApp Time Send Error"
+                    )
                 
         except Exception as e:
             frappe.log_error(f"Failed to process time reminder for {d.name}: {str(e)}", 
-                           f"WhatsApp Time Processing Error - {config.table_doctype}")
+                           f"WhatsApp Time Processing Error - {notification.document_type}")
             error_count += 1
     
     # Log summary
     if success_count > 0 or error_count > 0 or condition_skip_count > 0 or time_skip_count > 0:
         frappe.log_error(
-            f"Time reminders processed - Success: {success_count}, Errors: {error_count}, "
+            f"Time reminders processed for {notification.name} - Success: {success_count}, Errors: {error_count}, "
             f"Condition Skips: {condition_skip_count}, Time Skips: {time_skip_count}", 
-            f"WhatsApp Time Summary - {config.table_doctype}"
+            f"WhatsApp Time Summary - {notification.document_type}"
         )
 
 
 def is_time_in_range(time_field_value, start_datetime, end_datetime):
     """Check if the time field value falls within the target time range"""
     try:
-        from datetime import timedelta
-        
         # Handle different time field types
         if isinstance(time_field_value, datetime):
-            # If it's a datetime field, extract the time component
-            appointment_time = time_field_value.time()
             appointment_datetime = time_field_value
         elif isinstance(time_field_value, time):
-            # If it's a time field, combine with today's date
             today = start_datetime.date()
             appointment_datetime = datetime.combine(today, time_field_value)
-            appointment_time = time_field_value
         elif isinstance(time_field_value, timedelta):
-            # If it's a timedelta field (duration from midnight)
-            # Convert timedelta to time by adding to midnight
             midnight = datetime.combine(start_datetime.date(), time.min)
             appointment_datetime = midnight + time_field_value
-            appointment_time = appointment_datetime.time()
             
             frappe.log_error(
-                f"Timedelta converted: {time_field_value} -> {appointment_time.strftime('%H:%M')}", 
+                f"Timedelta converted: {time_field_value} -> {appointment_datetime.strftime('%H:%M')}", 
                 "WhatsApp Timedelta Debug"
             )
         elif isinstance(time_field_value, str):
-            # If it's a string, try to parse it
             try:
-                # Try parsing as time first (HH:MM format)
                 parsed_time = datetime.strptime(time_field_value, "%H:%M").time()
                 today = start_datetime.date()
                 appointment_datetime = datetime.combine(today, parsed_time)
-                appointment_time = parsed_time
             except ValueError:
                 try:
-                    # Try parsing as datetime
                     appointment_datetime = datetime.strptime(time_field_value, "%Y-%m-%d %H:%M:%S")
-                    appointment_time = appointment_datetime.time()
                 except ValueError:
                     try:
-                        # Try parsing timedelta-like strings (HH:MM:SS)
                         time_parts = time_field_value.split(':')
                         if len(time_parts) >= 2:
                             hours = int(time_parts[0])
@@ -945,265 +1386,52 @@ def is_time_in_range(time_field_value, start_datetime, end_datetime):
         return False
 
 
-# MODIFIED: Enhanced scheduler functions
-def process_scheduled_whatsapp_reminder(config):
-    """Process scheduled reminders for a specific doctype configuration - DATE-BASED ONLY"""
-    date_field = config.date_field
-    
-    # Calculate target date based on trigger timing
-    if config.trigger_timing == "Days Before":
-        target_date = add_days(nowdate(), config.days_before or 0)
-    elif config.trigger_timing == "Days After":
-        target_date = add_days(nowdate(), -(config.days_after or 0))
-    else:
-        target_date = nowdate()
-    
-    filters = {f"{date_field}": target_date}
-    
-    # Exclude cancelled documents for submittable doctypes
-    submittable_doctypes = [
-        "Purchase Order", "Sales Order", "Purchase Invoice", 
-        "Sales Invoice", "Delivery Note", "Purchase Receipt"
-    ]
-    
-    if config.table_doctype in submittable_doctypes:
-        filters["docstatus"] = ["!=", 2]
-    
-    docs = frappe.get_all(
-        config.table_doctype, 
-        filters=filters, 
-        fields=["name", "docstatus"] if config.table_doctype in submittable_doctypes else ["name"]
-    )
+# ============================================================================
+# CHILD TABLE REMINDERS
+# ============================================================================
 
-    whatsapp_handler = WhatsAppHandler()
-    success_count = error_count = condition_skip_count = 0
-
-    for d in docs:
-        try:
-            # Skip cancelled documents
-            if hasattr(d, 'docstatus') and d.docstatus == 2:
-                continue
-                
-            doc = frappe.get_doc(config.table_doctype, d.name)
-            
-            if hasattr(doc, 'docstatus') and doc.docstatus == 2:
-                continue
-            
-            # Check custom condition for scheduled reminders
-            if hasattr(config, 'custom_condition') and config.custom_condition:
-                if not evaluate_custom_condition(doc, config.custom_condition):
-                    condition_skip_count += 1
-                    continue
-            
-            phone = get_phone_number_enhanced(doc, config.phone_field)
-            if not phone:
-                error_count += 1
-                continue
-
-            message = MessageTemplateHandler.build_message(
-                doc, config, 
-                is_reminder=True, 
-                target_date=target_date,
-                trigger_event="Scheduled Reminder"
-            )
-            
-            if whatsapp_handler.send_message(phone, message, doc.doctype, doc.name):
-                success_count += 1
-            else:
-                error_count += 1
-                
-        except Exception as e:
-            frappe.log_error(f"Failed to process reminder for {d.name}: {str(e)}", 
-                           f"WhatsApp Reminder Error")
-            error_count += 1
-
-    # Log summary
-    if success_count > 0 or error_count > 0 or condition_skip_count > 0:
-        frappe.log_error(
-            f"Reminders processed - Success: {success_count}, Errors: {error_count}, Condition Skips: {condition_skip_count}", 
-            f"WhatsApp Reminder Summary - {config.table_doctype}"
-        )
-
-
-# Document event handlers (unchanged)
-def handle_whatsapp_notification_submit(doc, method):
-    """Handle WhatsApp notification for submitted documents"""
-    _handle_whatsapp_notification(doc, method, "Submit")
-
-
-def handle_whatsapp_notification_save(doc, method):
-    """Handle WhatsApp notification for saved documents"""
-    _handle_whatsapp_notification(doc, method, "Save")
-
-
-def handle_whatsapp_notification_cancel(doc, method):
-    """Handle WhatsApp notification for cancelled documents"""
-    _handle_whatsapp_notification(doc, method, "Cancel")
-
-
-def handle_whatsapp_notification_creation(doc, method):
-    """Handle WhatsApp notification for newly created documents"""
-    _handle_whatsapp_notification(doc, method, "On Creation")
-
-
-def handle_whatsapp_notification_update(doc, method):
-    """Handle WhatsApp notification for updated documents"""
-    if doc.is_new():
-        return
-    _handle_whatsapp_notification(doc, method, "On Update")
-
-
-def _handle_whatsapp_notification(doc, method, trigger_event):
-    """Unified WhatsApp notification handler"""
-    try:
-        settings = safe_get_settings()
-        if not settings or not settings.enabled:
-            return
-
-        # Find matching configurations
-        matching_configs = [
-            d for d in settings.whatsapp_doctypes 
-            if (d.enable_whatsapp and 
-                d.table_doctype.strip() == doc.doctype and
-                d.trigger_event == trigger_event and
-                d.trigger_timing == "Immediate")
-        ]
-        
-        if not matching_configs:
-            return
-
-        whatsapp_handler = WhatsAppHandler()
-        
-        for doctype_setting in matching_configs:
-            try:
-                # Check custom condition before processing
-                if hasattr(doctype_setting, 'custom_condition') and doctype_setting.custom_condition:
-                    if not evaluate_custom_condition(doc, doctype_setting.custom_condition):
-                        frappe.log_error(
-                            f"Custom condition not met for {doc.name}",
-                            f"WhatsApp Condition Skip - {doc.doctype}"
-                        )
-                        continue
-                
-                _process_whatsapp_config(doc, doctype_setting, whatsapp_handler)
-            except Exception as e:
-                frappe.log_error(
-                    f"Config processing failed for {doctype_setting.table_doctype}: {str(e)}", 
-                    f"WhatsApp Config Error - {doc.doctype}"
-                )
-
-    except Exception as e:
-        frappe.log_error(f"WhatsApp notification failed: {str(e)}", 
-                        f"DocType: {doc.doctype}, Name: {doc.name}")
-
-
-def _process_whatsapp_config(doc, doctype_setting, whatsapp_handler):
-    """Process individual WhatsApp configuration"""
-    if not doctype_setting.phone_field:
-        frappe.log_error("No phone field configured", f"{doc.doctype} - {doc.name}")
-        return
-    
-    # Handle assigned_to field (multiple assignments)
-    if doctype_setting.phone_field.strip() == "assigned_to":
-        assigned_phones = get_assigned_user_phone_numbers(doc)
-        
-        if not assigned_phones:
-            frappe.log_error("No assigned users with phone numbers found", 
-                           f"{doc.doctype} - {doc.name}")
-            return
-        
-        message = MessageTemplateHandler.build_message(
-            doc, doctype_setting, trigger_event=doctype_setting.trigger_event
-        )
-        
-        success_count = error_count = 0
-        
-        for assigned_user in assigned_phones:
-            try:
-                if whatsapp_handler.send_message(
-                    assigned_user['phone'], message, doc.doctype, doc.name
-                ):
-                    success_count += 1
-                else:
-                    error_count += 1
-            except Exception as send_error:
-                error_count += 1
-                frappe.log_error(
-                    f"Error sending to {assigned_user['user']}: {str(send_error)}", 
-                    f"Assignment Send Error - {doc.doctype}"
-                )
-        
-        frappe.log_error(
-            f"Assignment notifications: {success_count} sent, {error_count} failed", 
-            f"Assignment Summary - {doc.doctype}"
-        )
-        return
-    
-    # Handle single phone number
-    phone = get_phone_number_enhanced(doc, doctype_setting.phone_field)
-    if not phone:
-        frappe.log_error("No mobile number found", f"{doc.doctype} - {doc.name}")
-        return
-
-    message = MessageTemplateHandler.build_message(
-        doc, doctype_setting, trigger_event=doctype_setting.trigger_event
-    )
-    
-    whatsapp_handler.send_message(phone, message, doc.doctype, doc.name)
-
-
-# Child table reminder utilities (simplified without PDF)
-def process_scheduled_whatsapp_reminder_enhanced(config):
-    """Enhanced scheduler that handles both document and child table reminders"""
-    date_field = config.date_field
-    
-    if '.' in date_field:
-        return process_child_table_reminders_auto(config)
-    else:
-        return process_scheduled_whatsapp_reminder(config)
-
-
-def process_child_table_reminders_auto(config):
+def process_child_table_reminders(notification):
     """Process child table reminders based on date_field notation"""
-    date_field = config.date_field
+    
+    date_field = notification.date_field
     
     if '.' not in date_field:
         frappe.log_error("Invalid child table field format. Use 'table_field.date_field'", 
-                        f"Child Table Config Error - {config.table_doctype}")
+                        f"Child Table Config Error - {notification.document_type}")
         return
     
     child_table_field, child_date_field = date_field.split('.', 1)
     
     # Validate fields
-    parent_meta = frappe.get_meta(config.table_doctype)
+    parent_meta = frappe.get_meta(notification.document_type)
     table_field_meta = parent_meta.get_field(child_table_field)
     
     if not table_field_meta or table_field_meta.fieldtype != "Table":
         frappe.log_error(f"Invalid child table field '{child_table_field}'", 
-                        f"Child Table Field Error - {config.table_doctype}")
+                        f"Child Table Field Error - {notification.document_type}")
         return
     
     child_doctype = table_field_meta.options
     child_meta = frappe.get_meta(child_doctype)
     if not child_meta.get_field(child_date_field):
         frappe.log_error(f"Date field '{child_date_field}' not found in {child_doctype}", 
-                        f"Child Date Field Error - {config.table_doctype}")
+                        f"Child Date Field Error - {notification.document_type}")
         return
     
     # Calculate target date
-    if config.trigger_timing == "Days Before":
-        target_date = add_days(nowdate(), config.days_before or 0)
-    elif config.trigger_timing == "Days After":
-        target_date = add_days(nowdate(), -(config.days_after or 0))
+    if notification.days_before:
+        target_date = add_days(nowdate(), notification.days_before)
+    elif notification.days_after:
+        target_date = add_days(nowdate(), -(notification.days_after))
     else:
         target_date = nowdate()
     
     # Get parent documents with matching child records
     parent_docs = get_parents_with_matching_child_dates(
-        config.table_doctype, 
-        child_table_field, 
+        notification.document_type,
+        child_table_field,
         child_doctype,
-        child_date_field, 
+        child_date_field,
         target_date
     )
     
@@ -1212,22 +1440,24 @@ def process_child_table_reminders_auto(config):
     
     for parent_info in parent_docs:
         try:
-            parent_doc = frappe.get_doc(config.table_doctype, parent_info['name'])
+            parent_doc = frappe.get_doc(notification.document_type, parent_info['name'])
             
             # Skip cancelled documents
             if hasattr(parent_doc, 'docstatus') and parent_doc.docstatus == 2:
                 continue
             
-            # Check custom condition for child table reminders
-            if hasattr(config, 'custom_condition') and config.custom_condition:
-                if not evaluate_custom_condition(parent_doc, config.custom_condition):
+            # Check notification-level condition
+            if notification.condition:
+                if not evaluate_custom_condition(parent_doc, notification.condition):
                     condition_skip_count += 1
                     continue
             
-            phone = get_phone_number_enhanced(parent_doc, config.phone_field)
-            if not phone:
-                frappe.log_error(f"No phone found for {parent_doc.name}", 
-                               f"Child Reminder Phone - {config.table_doctype}")
+            # Get recipients
+            recipients = process_notification_recipients(parent_doc, notification)
+            
+            if not recipients:
+                frappe.log_error(f"No recipients found for {parent_doc.name}", 
+                               f"Child Reminder Recipients - {notification.document_type}")
                 error_count += 1
                 continue
             
@@ -1243,30 +1473,38 @@ def process_child_table_reminders_auto(config):
             if not matching_children:
                 continue
             
-            # Send individual messages for each child record
+            # Send messages for each child record to all recipients
             for child_row in matching_children:
-                message = build_child_message_auto(
-                    parent_doc, child_row, config, target_date, 
+                message = build_child_message(
+                    parent_doc, child_row, notification, target_date,
                     child_table_field, child_date_field
                 )
                 
-                if whatsapp_handler.send_message(phone, message, parent_doc.doctype, parent_doc.name):
-                    success_count += 1
-                else:
-                    error_count += 1
+                for recipient in recipients:
+                    try:
+                        if whatsapp_handler.send_message(recipient['phone'], message, parent_doc.doctype, parent_doc.name):
+                            success_count += 1
+                        else:
+                            error_count += 1
+                    except Exception as send_error:
+                        error_count += 1
+                        frappe.log_error(
+                            f"Send failed to {recipient['source']}: {str(send_error)}",
+                            f"Child Reminder Send Error"
+                        )
                         
         except Exception as e:
             frappe.log_error(
                 f"Child table reminder failed for {parent_info['name']}: {str(e)}", 
-                f"Child Reminder Error - {config.table_doctype}"
+                f"Child Reminder Error - {notification.document_type}"
             )
             error_count += 1
     
     # Log summary
     frappe.log_error(
-        f"Child table reminders ({child_table_field}.{child_date_field}) - "
+        f"Child table reminders ({child_table_field}.{child_date_field}) for {notification.name} - "
         f"Success: {success_count}, Errors: {error_count}, Condition Skips: {condition_skip_count}", 
-        f"Child Reminder Summary - {config.table_doctype}"
+        f"Child Reminder Summary - {notification.document_type}"
     )
 
 
@@ -1288,8 +1526,8 @@ def get_parents_with_matching_child_dates(parent_doctype, child_table_field,
         """
         
         results = frappe.db.sql(
-            query, 
-            (target_date, parent_doctype, child_table_field), 
+            query,
+            (target_date, parent_doctype, child_table_field),
             as_dict=True
         )
         
@@ -1306,34 +1544,28 @@ def get_parents_with_matching_child_dates(parent_doctype, child_table_field,
         return []
 
 
-def build_child_message_auto(parent_doc, child_row, config, target_date, 
-                           child_table_field, child_date_field):
+def build_child_message(parent_doc, child_row, notification, target_date,
+                       child_table_field, child_date_field):
     """Build message for individual child record"""
     
-    # Try custom template first
-    if hasattr(config, 'custom_template') and config.custom_template:
+    # Try template first
+    if notification.message:
         try:
-            template_doc = frappe.get_doc("WhatsApp Message Template", config.custom_template)
+            template_doc = frappe.get_doc("WhatsApp Message Template", notification.message)
             if template_doc and template_doc.is_active and template_doc.template_text:
-                return process_child_template_auto(
+                return process_child_template(
                     template_doc.template_text, parent_doc, child_row, target_date
                 )
         except Exception as e:
-            frappe.log_error(f"Template processing failed: {str(e)}", 
-                           f"Child Template Error - {config.table_doctype}")
-    
-    # Try reminder message field
-    if hasattr(config, 'reminder_message') and config.reminder_message:
-        return process_child_template_auto(
-            config.reminder_message, parent_doc, child_row, target_date
-        )
+            frappe.log_error(f"Child template processing failed: {str(e)}", 
+                           f"Child Template Error - {notification.document_type}")
     
     # Build default message
     return build_default_child_message(parent_doc, child_row, target_date, child_table_field)
 
 
-def process_child_template_auto(template_text, parent_doc, child_row, target_date):
-    """Process template with automatic placeholder detection"""
+def process_child_template(template_text, parent_doc, child_row, target_date):
+    """Process template with automatic placeholder detection for child tables"""
     
     template_text = MessageTemplateHandler.clean_html(template_text)
     
@@ -1343,7 +1575,7 @@ def process_child_template_auto(template_text, parent_doc, child_row, target_dat
     # Add child placeholders
     child_placeholders = {}
     common_child_fields = [
-        'amount', 'payment_amount', 'due_date', 'description', 
+        'amount', 'payment_amount', 'due_date', 'description',
         'idx', 'total', 'installment_amount', 'remarks'
     ]
     
@@ -1393,7 +1625,6 @@ def process_child_template_auto(template_text, parent_doc, child_row, target_dat
         else:
             message = message.replace(f'{{{pattern}}}', '')
     
-    # Format the message for WhatsApp
     message = MessageTemplateHandler.format_whatsapp_message(message)
     
     return message
@@ -1403,13 +1634,13 @@ def build_default_child_message(parent_doc, child_row, target_date, child_table_
     """Build default message for child table reminder"""
     
     # Get amount from common field names
-    amount = (getattr(child_row, 'payment_amount', None) or 
-             getattr(child_row, 'amount', None) or 
+    amount = (getattr(child_row, 'payment_amount', None) or
+             getattr(child_row, 'amount', None) or
              getattr(child_row, 'total', None))
     
     # Get description
-    description = (getattr(child_row, 'description', None) or 
-                  getattr(child_row, 'remarks', None) or 
+    description = (getattr(child_row, 'description', None) or
+                  getattr(child_row, 'remarks', None) or
                   f"Item {getattr(child_row, 'idx', '')}")
     
     # Build message
@@ -1426,90 +1657,14 @@ def build_default_child_message(parent_doc, child_row, target_date, child_table_
     if description:
         message += f"Description: {description}\n"
     
-    # Format the message for WhatsApp
     message = MessageTemplateHandler.format_whatsapp_message(message)
     
     return message.strip()
 
 
-# MODIFIED: Main scheduler functions
-def send_scheduled_whatsapp_reminders_enhanced():
-    """Enhanced scheduler that handles document, child table, AND time-based reminders"""
-    settings = safe_get_settings()
-    if not settings or not settings.enabled:
-        frappe.log_error("WhatsApp reminders skipped", "WhatsApp Settings disabled")
-        return
-
-    # Get all scheduled reminder configurations
-    scheduled_configs = [
-        config for config in settings.whatsapp_doctypes
-        if (config.schedule_enabled and 
-            config.enable_whatsapp and
-            config.trigger_event == "Scheduled Reminder" and
-            config.date_field)
-    ]
-
-    for doctype_config in scheduled_configs:
-        try:
-            # Check if this is a time-based reminder
-            if (getattr(doctype_config, 'custom_add_timing', 0) and 
-                getattr(doctype_config, 'custom_time_field', None)):
-                # Skip time-based reminders in daily scheduler
-                # They will be handled by the hourly scheduler
-                continue
-            else:
-                # Process regular date-based reminders
-                process_scheduled_whatsapp_reminder_enhanced(doctype_config)
-        except Exception as e:
-            frappe.log_error(
-                f"Enhanced scheduler failed for {doctype_config.table_doctype}: {str(e)}", 
-                f"WhatsApp Scheduler Error"
-            )
-
-
-# Utility and test functions (unchanged)
-def test_whatsapp_connection():
-    """Test WhatsApp API connection"""
-    whatsapp_handler = WhatsAppHandler()
-    
-    if not whatsapp_handler.is_enabled():
-        return {"status": "error", "message": "WhatsApp settings not configured"}
-    
-    test_message = "Test message from Frappe system."
-    test_number = "1234567890"  # Replace with actual test number
-    
-    result = whatsapp_handler.send_message(test_number, test_message, "Test", "Test")
-    
-    return {
-        "status": "success" if result else "error",
-        "message": "Test message sent" if result else "Test message failed"
-    }
-
-
-def send_whatsapp_without_pdf(receiver_id, message, doctype, docname):
-    """Emergency fallback - send without PDF (now same as regular send)"""
-    whatsapp_handler = WhatsAppHandler()
-    
-    if not whatsapp_handler.is_enabled():
-        return False
-    
-    # Add document reference to message
-    text_message = message + f"\n\nDocument: {docname}"
-    
-    return whatsapp_handler.send_message(receiver_id, text_message, doctype, docname)
-
-
-def send_whatsapp_message_with_attachment(receiver_id, message, doctype, docname, 
-                                        print_format=None, fallback_to_text=False):
-    """Backward compatibility wrapper - now sends text-only messages"""
-    whatsapp_handler = WhatsAppHandler()
-    return whatsapp_handler.send_message(receiver_id, message, doctype, docname)
-
-
-
-# Client Script Based
-
-# Add this to your existing whatsapp_utils.py file
+# ============================================================================
+# CLIENT SCRIPT BASED - MANUAL SENDING
+# ============================================================================
 
 @frappe.whitelist()
 def send_manual_whatsapp_message(doctype, docname, phone_number, message, template_name=None):
@@ -1517,24 +1672,20 @@ def send_manual_whatsapp_message(doctype, docname, phone_number, message, templa
     Backend API for manual WhatsApp message sending from frontend
     
     Args:
-        doctype: Document type (e.g., "Patient")
+        doctype: Document type
         docname: Document name/ID
         phone_number: Phone number to send to
-        message: Message text (can be custom or template-processed)
-        template_name: Optional template name if using template
+        message: Message text
+        template_name: Optional template name
     
     Returns:
         dict: {"success": bool, "message": str, "phone_used": str}
     """
     try:
-        # Check permissions
         if not frappe.has_permission(doctype, "read", docname):
             frappe.throw("Insufficient permissions to send WhatsApp message")
         
-        # Get the document
         doc = frappe.get_doc(doctype, docname)
-        
-        # Initialize WhatsApp handler
         whatsapp_handler = WhatsAppHandler()
         
         if not whatsapp_handler.is_enabled():
@@ -1544,7 +1695,6 @@ def send_manual_whatsapp_message(doctype, docname, phone_number, message, templa
                 "phone_used": None
             }
         
-        # Clean and validate phone number
         clean_phone = whatsapp_handler._clean_phone_number(phone_number)
         if not clean_phone:
             return {
@@ -1553,7 +1703,7 @@ def send_manual_whatsapp_message(doctype, docname, phone_number, message, templa
                 "phone_used": phone_number
             }
         
-        # Process message (if template is provided, process it)
+        # Process message (if template is provided)
         processed_message = message
         if template_name:
             try:
@@ -1563,18 +1713,15 @@ def send_manual_whatsapp_message(doctype, docname, phone_number, message, templa
             except Exception as e:
                 frappe.log_error(f"Template processing failed: {str(e)}", 
                                f"Manual WhatsApp Template Error")
-                # Continue with original message if template fails
         
-        # Send the message
         success = whatsapp_handler.send_message(
-            clean_phone, 
-            processed_message, 
-            doctype, 
+            clean_phone,
+            processed_message,
+            doctype,
             docname
         )
         
         if success:
-            # Add comment to document timeline
             add_whatsapp_comment(doc, clean_phone, processed_message)
             
             return {
@@ -1607,25 +1754,13 @@ def send_manual_whatsapp_message(doctype, docname, phone_number, message, templa
 
 @frappe.whitelist()
 def get_whatsapp_phone_number(doctype, docname, phone_field=None):
-    """
-    Get phone number for a document - used by frontend to auto-populate
-    
-    Args:
-        doctype: Document type
-        docname: Document name
-        phone_field: Specific phone field to check (optional)
-    
-    Returns:
-        dict: {"phone": str, "field_used": str, "formatted_phone": str}
-    """
+    """Get phone number for a document"""
     try:
-        # Check permissions
         if not frappe.has_permission(doctype, "read", docname):
             return {"phone": None, "field_used": None, "formatted_phone": None}
         
         doc = frappe.get_doc(doctype, docname)
         
-        # If specific phone_field provided, use it
         if phone_field:
             phone = get_phone_number_enhanced(doc, phone_field)
             if phone:
@@ -1635,7 +1770,7 @@ def get_whatsapp_phone_number(doctype, docname, phone_field=None):
                     "formatted_phone": f"+91{phone}"
                 }
         
-        # Auto-detect phone number from common fields
+        # Auto-detect phone number
         common_phone_fields = [
             'mobile_no', 'mobile', 'phone', 'cell_number', 'whatsapp_number',
             'contact_mobile', 'primary_mobile_no'
@@ -1661,15 +1796,7 @@ def get_whatsapp_phone_number(doctype, docname, phone_field=None):
 
 @frappe.whitelist()
 def get_whatsapp_templates(doctype=None):
-    """
-    Get available WhatsApp message templates
-    
-    Args:
-        doctype: Filter templates for specific doctype (optional)
-    
-    Returns:
-        list: [{"name": str, "template_name": str, "template_text": str}]
-    """
+    """Get available WhatsApp message templates"""
     try:
         filters = {"is_active": 1}
         if doctype:
@@ -1690,19 +1817,8 @@ def get_whatsapp_templates(doctype=None):
 
 @frappe.whitelist()
 def preview_whatsapp_template(doctype, docname, template_name):
-    """
-    Preview how a template will look with current document data
-    
-    Args:
-        doctype: Document type
-        docname: Document name
-        template_name: Template to preview
-    
-    Returns:
-        dict: {"success": bool, "preview": str, "error": str}
-    """
+    """Preview how a template will look with current document data"""
     try:
-        # Check permissions
         if not frappe.has_permission(doctype, "read", docname):
             return {
                 "success": False,
@@ -1720,9 +1836,8 @@ def preview_whatsapp_template(doctype, docname, template_name):
                 "error": "Template is not active"
             }
         
-        # Process template with document data
         preview_message = MessageTemplateHandler._process_template(
-            template_doc.template_text, 
+            template_doc.template_text,
             doc
         )
         
@@ -1743,17 +1858,7 @@ def preview_whatsapp_template(doctype, docname, template_name):
 
 
 def process_template_for_manual_send(doc, template_name, fallback_message):
-    """
-    Process template for manual sending
-    
-    Args:
-        doc: Document object
-        template_name: Name of template to process
-        fallback_message: Message to use if template fails
-    
-    Returns:
-        str: Processed message
-    """
+    """Process template for manual sending"""
     try:
         if not template_name:
             return fallback_message
@@ -1764,7 +1869,7 @@ def process_template_for_manual_send(doc, template_name, fallback_message):
             return fallback_message
         
         return MessageTemplateHandler._process_template(
-            template_doc.template_text, 
+            template_doc.template_text,
             doc
         )
         
@@ -1775,16 +1880,8 @@ def process_template_for_manual_send(doc, template_name, fallback_message):
 
 
 def add_whatsapp_comment(doc, phone_number, message):
-    """
-    Add a comment to document timeline when WhatsApp is sent manually
-    
-    Args:
-        doc: Document object
-        phone_number: Phone number message was sent to
-        message: Message that was sent
-    """
+    """Add a comment to document timeline when WhatsApp is sent manually"""
     try:
-        # Truncate message for comment (first 100 characters)
         short_message = message[:100] + "..." if len(message) > 100 else message
         
         comment_text = f"""
@@ -1809,12 +1906,7 @@ WhatsApp Message Sent
 
 @frappe.whitelist()
 def check_whatsapp_settings():
-    """
-    Check if WhatsApp is configured and enabled
-    
-    Returns:
-        dict: {"enabled": bool, "configured": bool, "message": str}
-    """
+    """Check if WhatsApp is configured and enabled"""
     try:
         settings = safe_get_settings()
         
@@ -1853,3 +1945,25 @@ def check_whatsapp_settings():
             "configured": False,
             "message": f"Error: {str(e)}"
         }
+
+
+# ============================================================================
+# UTILITY AND TEST FUNCTIONS
+# ============================================================================
+
+def test_whatsapp_connection():
+    """Test WhatsApp API connection"""
+    whatsapp_handler = WhatsAppHandler()
+    
+    if not whatsapp_handler.is_enabled():
+        return {"status": "error", "message": "WhatsApp settings not configured"}
+    
+    test_message = "Test message from Frappe system."
+    test_number = "1234567890"  # Replace with actual test number
+    
+    result = whatsapp_handler.send_message(test_number, test_message, "Test", "Test")
+    
+    return {
+        "status": "success" if result else "error",
+        "message": "Test message sent" if result else "Test message failed"
+    }

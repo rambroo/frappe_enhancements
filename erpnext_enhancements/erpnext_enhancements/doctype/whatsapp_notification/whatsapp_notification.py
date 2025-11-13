@@ -5,5 +5,5 @@
 from frappe.model.document import Document
 
 
-class WhatsAppSettings(Document):
+class WhatsAppNotification(Document):
 	pass
