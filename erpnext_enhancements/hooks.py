@@ -391,9 +391,9 @@ fixtures = [
     {
         "doctype": "Client Script",
     },
-    # {
-    #     "doctype": "Print Format",
-    # },
+    {
+        "doctype": "Print Format",
+    },
     {
         "doctype": "Workflow",
 
