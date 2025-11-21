@@ -720,22 +720,154 @@ def get_phone_numbers_by_role(role):
 
 
 # ============================================================================
+# LINKED DOCUMENT PROCESSING
+# ============================================================================
+
+def get_linked_document_recipients(doc, notification):
+    """
+    Get recipients from linked documents configured in notification.linked_documents
+
+    Args:
+        doc: Parent document object
+        notification: WhatsApp Notification document
+
+    Returns:
+        list: [{"phone": str, "source": str}]
+    """
+    all_phones = []
+
+    if not hasattr(notification, 'linked_documents') or not notification.linked_documents:
+        return all_phones
+
+    for linked_config in notification.linked_documents:
+        try:
+            linked_doctype = linked_config.linked_doctype
+            if not linked_doctype:
+                continue
+
+            # Find link fields in the document that point to the linked_doctype
+            linked_doc_name = find_linked_document(doc, linked_doctype)
+
+            if not linked_doc_name:
+                frappe.log_error(
+                    f"No link to {linked_doctype} found in {doc.doctype} {doc.name}",
+                    f"WhatsApp Linked Doc - {doc.doctype}"
+                )
+                continue
+
+            # Get the linked document
+            try:
+                linked_doc = frappe.get_doc(linked_doctype, linked_doc_name)
+            except Exception as e:
+                frappe.log_error(
+                    f"Could not fetch linked doc {linked_doctype} {linked_doc_name}: {str(e)}",
+                    f"WhatsApp Linked Doc Error - {doc.doctype}"
+                )
+                continue
+
+            # Check condition if specified
+            if linked_config.condition:
+                if not evaluate_custom_condition(linked_doc, linked_config.condition):
+                    continue
+
+            # Get phone from phone_field
+            if linked_config.phone_field:
+                phone = get_phone_number_enhanced(linked_doc, linked_config.phone_field)
+                if phone:
+                    all_phones.append({
+                        'phone': phone,
+                        'source': f"Linked {linked_doctype}: {linked_doc_name} ({linked_config.phone_field})"
+                    })
+
+            # Get assignees of linked document
+            if linked_config.send_to_all_assignees:
+                assigned_phones = get_assigned_user_phone_numbers(linked_doc)
+                for assigned in assigned_phones:
+                    all_phones.append({
+                        'phone': assigned['phone'],
+                        'source': f"Linked {linked_doctype} Assignee: {assigned['user']}"
+                    })
+
+            # Get role-based recipients
+            if linked_config.receiver_by_role:
+                role_phones = get_phone_numbers_by_role(linked_config.receiver_by_role)
+                for role_phone in role_phones:
+                    all_phones.append({
+                        'phone': role_phone['phone'],
+                        'source': f"Linked {linked_doctype} Role ({linked_config.receiver_by_role}): {role_phone['user']}"
+                    })
+
+        except Exception as e:
+            frappe.log_error(
+                f"Error processing linked document config: {str(e)}",
+                f"WhatsApp Linked Doc Error - {doc.doctype}"
+            )
+            continue
+
+    return all_phones
+
+
+def find_linked_document(doc, target_doctype):
+    """
+    Find a linked document of target_doctype in the given document
+    Scans all Link fields in the document to find one pointing to target_doctype
+
+    Args:
+        doc: Document object to scan
+        target_doctype: The doctype we're looking for
+
+    Returns:
+        str: Name of the linked document, or None if not found
+    """
+    try:
+        meta = frappe.get_meta(doc.doctype)
+
+        # Check all Link fields in the document
+        for field in meta.fields:
+            if field.fieldtype == "Link" and field.options == target_doctype:
+                linked_value = getattr(doc, field.fieldname, None)
+                if linked_value:
+                    return linked_value
+
+        # Also check Dynamic Link fields
+        for field in meta.fields:
+            if field.fieldtype == "Dynamic Link":
+                # Get the doctype field that this dynamic link references
+                link_doctype_field = field.options
+                if link_doctype_field and hasattr(doc, link_doctype_field):
+                    actual_doctype = getattr(doc, link_doctype_field, None)
+                    if actual_doctype == target_doctype:
+                        linked_value = getattr(doc, field.fieldname, None)
+                        if linked_value:
+                            return linked_value
+
+        return None
+
+    except Exception as e:
+        frappe.log_error(
+            f"Error finding linked document: {str(e)}",
+            f"WhatsApp Find Link Error - {doc.doctype}"
+        )
+        return None
+
+
+# ============================================================================
 # RECIPIENT PROCESSING
 # ============================================================================
 
 def process_notification_recipients(doc, notification):
     """
     Process all recipients from notification and return list of phone numbers
-    
+
     Args:
         doc: Document object
         notification: WhatsApp Notification document
-    
+
     Returns:
         list: [{"phone": str, "source": str}] - source indicates where phone came from
     """
     all_phones = []
-    
+
     # Handle send_to_all_assignees flag
     if getattr(notification, 'send_to_all_assignees', False):
         assigned_phones = get_assigned_user_phone_numbers(doc)
@@ -744,10 +876,24 @@ def process_notification_recipients(doc, notification):
                 'phone': assigned['phone'],
                 'source': f"Assigned User: {assigned['user']}"
             })
-    
+
+    # Process linked documents child table
+    linked_phones = get_linked_document_recipients(doc, notification)
+    all_phones.extend(linked_phones)
+
     # Process recipients child table
-    if not notification.recipients:
+    if not notification.recipients and not linked_phones:
         return all_phones
+
+    if not notification.recipients:
+        # Remove duplicates and return
+        seen_phones = set()
+        unique_phones = []
+        for phone_data in all_phones:
+            if phone_data['phone'] not in seen_phones:
+                seen_phones.add(phone_data['phone'])
+                unique_phones.append(phone_data)
+        return unique_phones
     
     for recipient in notification.recipients:
         try:

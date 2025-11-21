@@ -24,6 +24,8 @@
   "recipients_section",
   "send_to_all_assignees",
   "recipients",
+  "linked_documents_section",
+  "linked_documents",
   "message_sb",
   "message"
  ],
@@ -63,16 +65,19 @@
    "options": "DocType"
   },
   {
+   "depends_on": "eval:doc.event==\"Scheduled Reminder\"",
    "fieldname": "date_field",
    "fieldtype": "Data",
    "label": "Reference Date"
   },
   {
+   "depends_on": "eval:doc.event==\"Scheduled Reminder\"",
    "fieldname": "days_before",
    "fieldtype": "Int",
    "label": "Days Before Date"
   },
   {
+   "depends_on": "eval:doc.event==\"Scheduled Reminder\"",
    "fieldname": "days_after",
    "fieldtype": "Int",
    "label": "Days After Date"
@@ -104,6 +109,17 @@
    "options": "WhatsApp Notification Recipient"
   },
   {
+   "fieldname": "linked_documents_section",
+   "fieldtype": "Section Break",
+   "label": "Linked Documents"
+  },
+  {
+   "fieldname": "linked_documents",
+   "fieldtype": "Table",
+   "label": "Linked Documents",
+   "options": "WhatsApp Linked Document"
+  },
+  {
    "fieldname": "message_sb",
    "fieldtype": "Section Break",
    "label": "Message"
@@ -129,11 +145,13 @@
    "label": "Add Timing"
   },
   {
+   "depends_on": "eval:doc.add_timing",
    "fieldname": "time_field",
    "fieldtype": "Data",
    "label": "Time Field"
   },
   {
+   "depends_on": "eval:doc.add_timing",
    "fieldname": "hours_before",
    "fieldtype": "Int",
    "label": "Hours Before"
@@ -142,7 +160,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-11-12 01:27:32.146995",
+ "modified": "2025-11-21 15:33:00.476807",
  "modified_by": "Administrator",
  "module": "erpnext_enhancements",
  "name": "WhatsApp Notification",
