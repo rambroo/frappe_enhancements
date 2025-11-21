@@ -6,25 +6,6 @@ app_email = "rohan@micronxt.com"
 app_license = "mit"
 
 
-# required_apps = []
-
-doctype_js = {
-    "Purchase Order": "public/js/purchase_order_review.js",
-    "Sales Order": "public/js/sales_order.js",
-    "Payment Entry": "public/js/payment_entry_review.js"
-}
-# Document Events
-
-
-jenv = {
-    "jinja": [
-        "erpnext_enhancements.templates.includes.po_review_modal_template",
-        "erpnext_enhancements.templates.includes.payment_review_modal_template"
-    ]
-}
-app_include_js = [
-    "assets/erpnext_enhancements/js/sales_order.js"
-]
 # jenv = {
 #     "jinja": ["erpnext_enhancements.templates.includes.po_review_modal_template"]
 # }
@@ -43,12 +24,6 @@ doc_events = {
         "on_cancel": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_cancel",
         "after_insert": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_creation",
         "on_update": "erpnext_enhancements.api.whatsapp_reminders.whatsapp.handle_whatsapp_notification_update"
-    },    
-    "Purchase Receipt": {
-        "on_submit": "erpnext_enhancements.custom_functions.Materials_received_whatsapp_message.send_material_receipt_notifications"
-    },
-    "Stock Entry": {
-        "on_submit": "erpnext_enhancements.custom_functions.Materials_received_whatsapp_message.send_material_receipt_notifications"
     }
 }
 
