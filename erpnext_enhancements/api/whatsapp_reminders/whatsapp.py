@@ -21,92 +21,92 @@ def safe_get_settings():
 
 
 class WhatsAppHandler:
-    """Centralized WhatsApp message handler - simplified without PDF support"""
-    
+    """Centralized WhatsApp message handler using HiSocial API"""
+
     def __init__(self):
         self.settings = safe_get_settings()
-        self.api_url = "https://api.botmastersender.com/api/v2/?action=send"
-        
+        self.api_url = "https://hisocial.in/api/send"
+
         if not self.settings:
             frappe.throw("WhatsApp Settings not configured or not available")
 
     def is_enabled(self):
         """Check if WhatsApp is enabled and configured"""
-        return (self.settings.enabled and 
-                self.settings.sender_id and 
-                self.settings.auth_token)
-    
+        return (self.settings.enabled and
+                self.settings.instance_id and
+                self.settings.access_token)
+
     def send_message(self, receiver_id, message, doctype=None, docname=None):
         """Send WhatsApp text message"""
         if not self.is_enabled():
             frappe.log_error("WhatsApp not configured", "WhatsApp Settings")
             return False
-        
+
         clean_receiver = self._clean_phone_number(receiver_id)
         if not clean_receiver:
-            frappe.log_error(f"Invalid phone number: {receiver_id}", 
+            frappe.log_error(f"Invalid phone number: {receiver_id}",
                            f"WhatsApp - {doctype} {docname}")
             return False
-        
+
         return self._send_text_message(clean_receiver, message, doctype, docname)
-    
+
     def _send_text_message(self, receiver_id, message, doctype, docname):
-        """Send text-only message"""
+        """Send text-only message via HiSocial API"""
         try:
-            data = {
-                'senderId': self.settings.sender_id,
-                'authToken': self.settings.auth_token,
-                'messageText': message,
-                'receiverId': f"91{receiver_id}"
+            payload = {
+                'number': f"91{receiver_id}",
+                'type': 'text',
+                'message': message,
+                'instance_id': self.settings.instance_id,
+                'access_token': self.settings.access_token
             }
-            
-            response = requests.post(self.api_url, data=data, timeout=30)
+
+            headers = {'Content-Type': 'application/json'}
+            response = requests.post(self.api_url, json=payload, headers=headers, timeout=30)
             return self._handle_response(response, receiver_id, doctype, docname)
-            
+
         except Exception as e:
-            frappe.log_error(f"Message sending failed: {str(e)}", 
+            frappe.log_error(f"Message sending failed: {str(e)}",
                            f"WhatsApp Error - {doctype} {docname}")
             return False
-    
+
     def _handle_response(self, response, receiver_id, doctype, docname):
-        """Handle API response"""
+        """Handle HiSocial API response"""
         if response.status_code != 200:
-            frappe.log_error(f"API failed with status {response.status_code}: {response.text}", 
+            frappe.log_error(f"API failed with status {response.status_code}: {response.text}",
                            f"WhatsApp HTTP Error - {doctype}")
             return False
-        
+
         try:
             response_data = response.json()
-            if isinstance(response_data, list) and len(response_data) > 0:
-                response_data = response_data[0]
-            
-            # Check for success indicators
-            success_indicators = [
-                response_data.get('status') == 'success' if isinstance(response_data, dict) else False,
-                'success' in response.text.lower(),
-                'sent' in response.text.lower(),
-                response_data.get('result') == 'success' if isinstance(response_data, dict) else False
-            ]
-            
-            if any(success_indicators):
-                frappe.log_error(f"WhatsApp sent successfully to {receiver_id}", 
-                               f"WhatsApp Success - {doctype}")
-                return True
-            else:
-                frappe.log_error(f"API returned error: {response.text}", 
-                               f"WhatsApp API Error - {doctype}")
-                return False
-                
-        except ValueError:
-            # Non-JSON response
+
+            # HiSocial returns status field
+            if isinstance(response_data, dict):
+                status = response_data.get('status')
+                if status == 'success' or status == True or status == 'sent':
+                    frappe.log_error(f"WhatsApp sent successfully to 91{receiver_id}",
+                                   f"WhatsApp Success - {doctype}")
+                    return True
+                else:
+                    error_msg = response_data.get('message', response.text)
+                    frappe.log_error(f"API returned error: {error_msg}",
+                                   f"WhatsApp API Error - {doctype}")
+                    return False
+
+            # Fallback check
             if 'success' in response.text.lower() or 'sent' in response.text.lower():
-                frappe.log_error(f"WhatsApp sent successfully to {receiver_id}", 
+                frappe.log_error(f"WhatsApp sent successfully to 91{receiver_id}",
                                f"WhatsApp Success - {doctype}")
                 return True
             else:
-                frappe.log_error(f"API returned non-JSON response: {response.text}", 
+                frappe.log_error(f"API returned: {response.text}",
                                f"WhatsApp API Error - {doctype}")
                 return False
+
+        except ValueError:
+            frappe.log_error(f"API returned non-JSON response: {response.text}",
+                           f"WhatsApp API Error - {doctype}")
+            return False
     
     def _clean_phone_number(self, phone):
         """Clean and validate phone number"""
@@ -1046,21 +1046,21 @@ def handle_whatsapp_notification_update(doc, method):
 
 
 def _handle_whatsapp_notification(doc, method, trigger_event):
-    """Unified WhatsApp notification handler for immediate events"""
+    """Unified WhatsApp notification handler for immediate events - enqueues background job"""
     try:
         # Skip internal/system doctypes to prevent recursion and performance issues
         excluded_doctypes = [
             'WhatsApp Notification', 'WhatsApp Notification Recipient',
-            'WhatsApp Message Template', 'WhatsApp Setting',
+            'WhatsApp Message Template', 'WhatsApp Setting', 'WhatsApp Linked Document',
             'Comment', 'Communication', 'Email Queue', 'Notification Log',
             'Activity Log', 'Error Log', 'Scheduled Job Log', 'Version',
             'Access Log', 'Route History', 'View Log', 'Energy Point Log',
             'Notification Settings', 'Web Form', 'Web Page', 'Portal Settings'
         ]
-        
+
         if doc.doctype in excluded_doctypes:
             return
-        
+
         settings = safe_get_settings()
         if not settings or not settings.enabled:
             return
@@ -1070,82 +1070,88 @@ def _handle_whatsapp_notification(doc, method, trigger_event):
             document_type=doc.doctype,
             event=trigger_event
         )
-        
+
         if not notifications:
             return
 
-        whatsapp_handler = WhatsAppHandler()
-        
+        # Enqueue background job for each notification
         for notification_data in notifications:
-            try:
-                notification = frappe.get_doc("WhatsApp Notification", notification_data.name)
-                
-                # Check notification-level condition
-                if notification.condition:
-                    if not evaluate_custom_condition(doc, notification.condition):
-                        frappe.log_error(
-                            f"Notification condition not met for {doc.name}",
-                            f"WhatsApp Condition Skip - {doc.doctype}"
-                        )
-                        continue
-                
-                # Process notification
-                _process_whatsapp_notification(doc, notification, whatsapp_handler)
-                
-            except Exception as e:
-                frappe.log_error(
-                    f"Notification processing failed for {notification_data.name}: {str(e)}", 
-                    f"WhatsApp Notification Error - {doc.doctype}"
-                )
+            frappe.enqueue(
+                "erpnext_enhancements.api.whatsapp_reminders.whatsapp.process_whatsapp_notification_background",
+                doctype=doc.doctype,
+                docname=doc.name,
+                notification_name=notification_data.name,
+                queue="default",
+                timeout=300
+            )
+            frappe.logger("whatsapp_notification").info(
+                f"WhatsApp notification queued for {doc.doctype} {doc.name} - Notification: {notification_data.name}"
+            )
 
     except Exception as e:
-        frappe.log_error(f"WhatsApp notification handler failed: {str(e)}", 
+        frappe.log_error(f"WhatsApp notification handler failed: {str(e)}",
                         f"DocType: {doc.doctype}, Name: {doc.name}")
 
 
-def _process_whatsapp_notification(doc, notification, whatsapp_handler):
-    """Process individual WhatsApp notification and send to all recipients"""
-    
-    # Get all recipient phone numbers
-    recipients = process_notification_recipients(doc, notification)
-    
-    if not recipients:
-        frappe.log_error(
-            f"No recipients found for notification {notification.name}",
-            f"WhatsApp Recipients - {doc.doctype}"
-        )
-        return
-    
-    # Build message once
-    message = MessageTemplateHandler.build_message(doc, notification)
-    
-    # Send to all recipients
-    success_count = error_count = 0
-    
-    for recipient in recipients:
-        try:
-            if whatsapp_handler.send_message(
-                recipient['phone'], message, doc.doctype, doc.name
-            ):
-                success_count += 1
-                frappe.log_error(
-                    f"Message sent to {recipient['source']} ({recipient['phone']})",
-                    f"WhatsApp Success - {doc.doctype}"
-                )
-            else:
+def process_whatsapp_notification_background(doctype, docname, notification_name):
+    """Background job to process WhatsApp notification and send messages"""
+    job_logger = frappe.logger("whatsapp_background_job")
+    job_logger.info(f"START: WhatsApp notification for {doctype} {docname} - Notification: {notification_name}")
+
+    try:
+        # Fetch the document
+        doc = frappe.get_doc(doctype, docname)
+        job_logger.info(f"SUCCESS: Fetched {doctype} document {doc.name}")
+
+        # Fetch the notification
+        notification = frappe.get_doc("WhatsApp Notification", notification_name)
+
+        # Check notification-level condition
+        if notification.condition:
+            if not evaluate_custom_condition(doc, notification.condition):
+                job_logger.info(f"Condition not met for notification {notification.name}")
+                return
+
+        # Get all recipient phone numbers
+        recipients = process_notification_recipients(doc, notification)
+
+        if not recipients:
+            job_logger.info(f"No recipients found for notification {notification.name}")
+            return
+
+        # Build message once
+        message = MessageTemplateHandler.build_message(doc, notification)
+        job_logger.info(f"Message built for {len(recipients)} recipients")
+
+        # Create WhatsApp handler
+        whatsapp_handler = WhatsAppHandler()
+
+        # Send to all recipients
+        success_count = error_count = 0
+
+        for recipient in recipients:
+            try:
+                if whatsapp_handler.send_message(
+                    recipient['phone'], message, doc.doctype, doc.name
+                ):
+                    success_count += 1
+                    job_logger.info(f"Message sent to {recipient['source']} ({recipient['phone']})")
+                else:
+                    error_count += 1
+            except Exception as send_error:
                 error_count += 1
-        except Exception as send_error:
-            error_count += 1
-            frappe.log_error(
-                f"Error sending to {recipient['source']}: {str(send_error)}", 
-                f"WhatsApp Send Error - {doc.doctype}"
-            )
-    
-    # Log summary
-    if success_count > 0 or error_count > 0:
+                job_logger.error(f"Error sending to {recipient['source']}: {str(send_error)}")
+
+        # Log summary
+        job_logger.info(
+            f"COMPLETE: Notification '{notification.name}' - {success_count} sent, {error_count} failed"
+        )
+
+    except Exception as e:
+        job_logger.error(f"FAILED: {str(e)}")
         frappe.log_error(
-            f"Notification '{notification.name}': {success_count} sent, {error_count} failed", 
-            f"WhatsApp Summary - {doc.doctype}"
+            f"Background WhatsApp job failed: {str(e)}",
+            f"WhatsApp Background Error - {doctype}"
         )
 
 
@@ -2070,7 +2076,7 @@ def check_whatsapp_settings():
                 "message": "WhatsApp is disabled in settings"
             }
         
-        if not settings.sender_id or not settings.auth_token:
+        if not settings.instance_id or not settings.access_token:
             return {
                 "enabled": False,
                 "configured": False,

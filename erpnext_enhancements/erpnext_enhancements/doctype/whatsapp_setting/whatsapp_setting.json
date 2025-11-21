@@ -6,8 +6,8 @@
  "engine": "InnoDB",
  "field_order": [
   "enabled",
-  "sender_id",
-  "auth_token"
+  "instance_id",
+  "access_token"
  ],
  "fields": [
   {
@@ -17,14 +17,16 @@
    "label": "Enabled"
   },
   {
-   "fieldname": "sender_id",
+   "fieldname": "instance_id",
    "fieldtype": "Data",
-   "label": "Sender Number"
+   "label": "Instance ID",
+   "reqd": 1
   },
   {
-   "fieldname": "auth_token",
+   "fieldname": "access_token",
    "fieldtype": "Data",
-   "label": "Token ID"
+   "label": "Access Token",
+   "reqd": 1
   }
  ],
  "grid_page_length": 50,
