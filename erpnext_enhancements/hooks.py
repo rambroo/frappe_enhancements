@@ -356,38 +356,38 @@ after_install = "erpnext_enhancements.install.after_install"
 # }
 
 
-fixtures = [
-    {
-        "doctype": "Custom Field",
-    },
-    {
-        "doctype": "Property Setter",
-    },
-    {
-        "doctype": "Client Script",
-    },
-    {
-        "doctype": "Print Format",
-    },
-    {
-        "doctype": "Workflow",
+# fixtures = [
+#     {
+#         "doctype": "Custom Field",
+#     },
+#     {
+#         "doctype": "Property Setter",
+#     },
+#     {
+#         "doctype": "Client Script",
+#     },
+#     {
+#         "doctype": "Print Format",
+#     },
+#     {
+#         "doctype": "Workflow",
 
-    },
-    {
-        "doctype": "Workflow State",
+#     },
+#     {
+#         "doctype": "Workflow State",
 
-    },
-    {
-        "doctype": "Role",  # Includes newly created roles
-        "filters": [["disabled", "=", 0]]  # Excludes disabled roles
-    },
-    {
-        "doctype": "Custom DocPerm",  # Includes role permission manager customizations
-    },
-    {"doctype": "Report"},  # Custom reports created in ERPNext
-    {"doctype": "Page"},  # Custom pages you might have created
-    {"doctype": "Module Def"},  # Any custom modules created in your app
-    {"doctype": "Notification"},  # Custom email/SMS notifications set up
-    {"doctype": "Workflow Action Master"},  # Custom workflow actions
-    {"doctype": "Terms and Conditions"},  # Custom terms and conditions
-]
+#     },
+#     {
+#         "doctype": "Role",  # Includes newly created roles
+#         "filters": [["disabled", "=", 0]]  # Excludes disabled roles
+#     },
+#     {
+#         "doctype": "Custom DocPerm",  # Includes role permission manager customizations
+#     },
+#     {"doctype": "Report"},  # Custom reports created in ERPNext
+#     {"doctype": "Page"},  # Custom pages you might have created
+#     {"doctype": "Module Def"},  # Any custom modules created in your app
+#     {"doctype": "Notification"},  # Custom email/SMS notifications set up
+#     {"doctype": "Workflow Action Master"},  # Custom workflow actions
+#     {"doctype": "Terms and Conditions"},  # Custom terms and conditions
+# ]
